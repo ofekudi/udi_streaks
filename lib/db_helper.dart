@@ -53,4 +53,18 @@ class DBHelper {
 
     return id;
   }
+
+  Future<List<Map<String, dynamic>>> getHabits() async {
+    final Database db = await database;
+    return await db.query('habits', orderBy: 'created_at DESC');
+  }
+
+  Future<void> deleteHabit(String id) async {
+    final Database db = await database;
+    await db.delete(
+      'habits',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
 }
