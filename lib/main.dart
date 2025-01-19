@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'db_helper.dart';
 
 void main() {
   runApp(const MyApp());
@@ -56,6 +57,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+  final TextEditingController _textController = TextEditingController();
 
   void _incrementCounter() {
     showDialog(
@@ -64,19 +66,27 @@ class _MyHomePageState extends State<MyHomePage> {
         return AlertDialog(
           title: const Text('Start a new streak!'),
           content: TextField(
+            controller: _textController,
             decoration: const InputDecoration(hintText: "Type something here"),
           ),
           actions: <Widget>[
             TextButton(
               child: const Text('Done'),
-              onPressed: () {
-                // Add any action you want to perform when "Done" is pressed
+              onPressed: () async {
+                if (_textController.text.isNotEmpty) {
+                  await DBHelper().insertHabit(_textController.text);
+                  setState(() {
+                    _counter++;
+                  });
+                }
+                _textController.clear();
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
               child: const Text('Close'),
               onPressed: () {
+                _textController.clear();
                 Navigator.of(context).pop();
               },
             ),
