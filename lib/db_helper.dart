@@ -75,7 +75,7 @@ class DBHelper {
     // Create a new list with mutable maps
     final List<Map<String, dynamic>> mutableHabits = [];
 
-    // For each habit, check if it was completed today
+    // For each habit, check if it was completed today and get streaks
     for (var habit in habits) {
       final completion = await db.query(
         'habit_completions',
@@ -84,10 +84,14 @@ class DBHelper {
         limit: 1,
       );
 
+      final streaks = await getHabitStreaks(habit['id']);
+
       // Create a new map with all the original data plus the completed_today status
       mutableHabits.add({
         ...habit,
         'completed_today': completion.isNotEmpty,
+        'current_streak': streaks['current_streak'],
+        'longest_streak': streaks['longest_streak'],
       });
     }
 
@@ -133,5 +137,70 @@ class DBHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<Map<String, int>> getHabitStreaks(String habitId) async {
+    final Database db = await database;
+    final completions = await db.query(
+      'habit_completions',
+      where: 'habit_id = ?',
+      whereArgs: [habitId],
+      orderBy: 'completed_at DESC',
+    );
+
+    if (completions.isEmpty) {
+      return {'current_streak': 0, 'longest_streak': 0};
+    }
+
+    int currentStreak = 0;
+    int longestStreak = 0;
+    int currentCount = 0;
+    DateTime? lastDate;
+
+    for (var completion in completions) {
+      final completedAt = DateTime.parse(completion['completed_at'] as String);
+      final dateOnly =
+          DateTime(completedAt.year, completedAt.month, completedAt.day);
+
+      if (lastDate == null) {
+        // First completion
+        currentCount = 1;
+        lastDate = dateOnly;
+      } else {
+        final difference = lastDate.difference(dateOnly).inDays;
+
+        if (difference == 1) {
+          // Consecutive day
+          currentCount++;
+        } else {
+          // Streak broken
+          if (currentCount > longestStreak) {
+            longestStreak = currentCount;
+          }
+          currentCount = 1;
+        }
+        lastDate = dateOnly;
+      }
+    }
+
+    // Check final streak
+    if (currentCount > longestStreak) {
+      longestStreak = currentCount;
+    }
+
+    // Calculate current streak
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    if (lastDate != null) {
+      final difference = todayDate.difference(lastDate).inDays;
+      if (difference <= 1) {
+        currentStreak = currentCount;
+      }
+    }
+
+    return {
+      'current_streak': currentStreak,
+      'longest_streak': longestStreak,
+    };
   }
 }

@@ -139,13 +139,59 @@ class _MyHomePageState extends State<MyHomePage> {
                       _loadHabits();
                     },
                   ),
-                  title: Text(
-                    habit['name'],
-                    style: TextStyle(
-                      decoration: habit['completed_today']
-                          ? TextDecoration.lineThrough
-                          : null,
-                    ),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          habit['name'],
+                          style: TextStyle(
+                            decoration: habit['completed_today']
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ),
+                      if (habit['current_streak'] > 0 ||
+                          habit['longest_streak'] > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color:
+                                Theme.of(context).colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.local_fire_department,
+                                  size: 16, color: Colors.orange),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${habit['current_streak']}',
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (habit['longest_streak'] >
+                                  habit['current_streak'])
+                                Text(
+                                  ' / ${habit['longest_streak']}',
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer
+                                        .withOpacity(0.7),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                   subtitle: Text(
                     'Started: ${DateTime.parse(habit['created_at']).toString().split('.')[0]}',
