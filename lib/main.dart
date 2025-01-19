@@ -13,7 +13,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'UdiStreaks',
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -33,7 +33,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'UdiStreaks'),
     );
   }
 }
@@ -194,40 +194,91 @@ class _MyHomePageState extends State<MyHomePage> {
                     ],
                   ),
                   subtitle: Text(
-                    'Started: ${DateTime.parse(habit['created_at']).toString().split('.')[0]}',
+                    'Started: ${DateTime.parse(habit['created_at']).toString().split(' ')[0]}',
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            title: const Text('Delete Habit'),
-                            content: Text(
-                                'Are you sure you want to delete "${habit['name']}"?'),
-                            actions: [
-                              TextButton(
-                                child: const Text('Cancel'),
-                                onPressed: () {
-                                  Navigator.of(context).pop();
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ListTile(
+                                title: Text(
+                                  habit['name'],
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                subtitle: Text(
+                                  'Started: ${DateTime.parse(habit['created_at']).toString().split(' ')[0]}',
+                                ),
+                              ),
+                              const Divider(),
+                              ListTile(
+                                leading: Icon(
+                                  habit['completed_today']
+                                      ? Icons.check_circle
+                                      : Icons.circle_outlined,
+                                  color: habit['completed_today']
+                                      ? Colors.green
+                                      : Colors.grey,
+                                ),
+                                title: Text(
+                                  habit['completed_today']
+                                      ? 'Completed Today'
+                                      : 'Mark as Completed',
+                                ),
+                                onTap: () async {
+                                  await DBHelper()
+                                      .toggleHabitCompletion(habit['id']);
+                                  _loadHabits();
+                                  Navigator.pop(context);
                                 },
                               ),
-                              TextButton(
-                                child: const Text('Delete',
-                                    style: TextStyle(color: Colors.red)),
-                                onPressed: () async {
-                                  await DBHelper().deleteHabit(habit['id']);
-                                  _loadHabits();
-                                  Navigator.of(context).pop();
+                              ListTile(
+                                leading: const Icon(Icons.delete_outline,
+                                    color: Colors.red),
+                                title: const Text('Delete Habit'),
+                                onTap: () {
+                                  Navigator.pop(context); // Close bottom sheet
+                                  showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return AlertDialog(
+                                        title: const Text('Delete Habit'),
+                                        content: Text(
+                                            'Are you sure you want to delete "${habit['name']}"?'),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('Cancel'),
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                            },
+                                          ),
+                                          TextButton(
+                                            child: const Text('Delete',
+                                                style: TextStyle(
+                                                    color: Colors.red)),
+                                            onPressed: () async {
+                                              await DBHelper()
+                                                  .deleteHabit(habit['id']);
+                                              _loadHabits();
+                                              Navigator.of(context).pop();
+                                            },
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
                                 },
                               ),
                             ],
-                          );
-                        },
-                      );
-                    },
-                  ),
+                          ),
+                        );
+                      },
+                    );
+                  },
                 );
               },
             ),
