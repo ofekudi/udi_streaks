@@ -126,9 +126,30 @@ class _MyHomePageState extends State<MyHomePage> {
               itemBuilder: (context, index) {
                 final habit = _habits[index];
                 return ListTile(
-                  title: Text(habit['name']),
+                  leading: IconButton(
+                    icon: Icon(
+                      habit['completed_today']
+                          ? Icons.check_circle
+                          : Icons.circle_outlined,
+                      color:
+                          habit['completed_today'] ? Colors.green : Colors.grey,
+                    ),
+                    onPressed: () async {
+                      await DBHelper().toggleHabitCompletion(habit['id']);
+                      _loadHabits();
+                    },
+                  ),
+                  title: Text(
+                    habit['name'],
+                    style: TextStyle(
+                      decoration: habit['completed_today']
+                          ? TextDecoration.lineThrough
+                          : null,
+                    ),
+                  ),
                   subtitle: Text(
-                      'Started: ${DateTime.parse(habit['created_at']).toString().split('.')[0]}'),
+                    'Started: ${DateTime.parse(habit['created_at']).toString().split('.')[0]}',
+                  ),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
                     onPressed: () {
