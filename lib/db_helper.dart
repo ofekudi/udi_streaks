@@ -95,6 +95,10 @@ class DBHelper {
       });
     }
 
+    // Sort habits by current streak in descending order
+    mutableHabits.sort((a, b) =>
+        (b['current_streak'] as int).compareTo(a['current_streak'] as int));
+
     return mutableHabits;
   }
 
@@ -157,45 +161,78 @@ class DBHelper {
     int currentCount = 0;
     DateTime? lastDate;
 
+    // Get today's date at midnight for comparison
+    final today = DateTime.now().copyWith(
+        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+
+    // Check if the most recent completion is from today or yesterday
+    final mostRecentCompletion =
+        DateTime.parse(completions.first['completed_at'] as String);
+    final daysSinceLastCompletion =
+        today.difference(mostRecentCompletion).inDays;
+
+    // If more than 1 day has passed since last completion, current streak is 0
+    if (daysSinceLastCompletion > 1) {
+      currentStreak = 0;
+    } else {
+      // Calculate current streak
+      for (var completion in completions) {
+        final completedAt =
+            DateTime.parse(completion['completed_at'] as String);
+        final dateOnly =
+            DateTime(completedAt.year, completedAt.month, completedAt.day);
+
+        if (lastDate == null) {
+          currentCount = 1;
+          lastDate = dateOnly;
+        } else {
+          final difference = lastDate.difference(dateOnly).inDays;
+
+          if (difference == 1) {
+            // Consecutive day
+            currentCount++;
+          } else {
+            // More than one day gap, streak is broken
+            break;
+          }
+          lastDate = dateOnly;
+        }
+      }
+      currentStreak = currentCount;
+    }
+
+    // Calculate longest streak
+    DateTime? lastDateForLongest;
+    int countForLongest = 0;
+
     for (var completion in completions) {
       final completedAt = DateTime.parse(completion['completed_at'] as String);
       final dateOnly =
           DateTime(completedAt.year, completedAt.month, completedAt.day);
 
-      if (lastDate == null) {
-        // First completion
-        currentCount = 1;
-        lastDate = dateOnly;
+      if (lastDateForLongest == null) {
+        countForLongest = 1;
+        lastDateForLongest = dateOnly;
       } else {
-        final difference = lastDate.difference(dateOnly).inDays;
+        final difference = lastDateForLongest.difference(dateOnly).inDays;
 
         if (difference == 1) {
           // Consecutive day
-          currentCount++;
+          countForLongest++;
         } else {
-          // Streak broken
-          if (currentCount > longestStreak) {
-            longestStreak = currentCount;
+          // Streak broken, check if this was the longest
+          if (countForLongest > longestStreak) {
+            longestStreak = countForLongest;
           }
-          currentCount = 1;
+          countForLongest = 1;
         }
-        lastDate = dateOnly;
+        lastDateForLongest = dateOnly;
       }
     }
 
-    // Check final streak
-    if (currentCount > longestStreak) {
-      longestStreak = currentCount;
-    }
-
-    // Calculate current streak
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-    if (lastDate != null) {
-      final difference = todayDate.difference(lastDate).inDays;
-      if (difference <= 1) {
-        currentStreak = currentCount;
-      }
+    // Check one last time for the longest streak
+    if (countForLongest > longestStreak) {
+      longestStreak = countForLongest;
     }
 
     return {

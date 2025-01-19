@@ -163,9 +163,18 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              const Icon(Icons.local_fire_department,
-                                  size: 16, color: Colors.orange),
+                              Icon(
+                                habit['current_streak'] > 0
+                                    ? Icons.local_fire_department
+                                    : Icons.restart_alt,
+                                size: 16,
+                                color: habit['current_streak'] > 0
+                                    ? Colors.orange
+                                    : Colors.grey,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 '${habit['current_streak']}',
@@ -174,6 +183,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       .colorScheme
                                       .onPrimaryContainer,
                                   fontWeight: FontWeight.bold,
+                                  height: 1.0,
                                 ),
                               ),
                               if (habit['longest_streak'] >
