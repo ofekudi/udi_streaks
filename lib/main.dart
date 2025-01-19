@@ -97,13 +97,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
-              child: const Text('Close'),
-              onPressed: () {
-                _textController.clear();
-                Navigator.of(context).pop();
-              },
-            ),
           ],
         );
       },
