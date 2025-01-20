@@ -143,7 +143,7 @@ class DBHelper {
     );
   }
 
-  Future<Map<String, int>> getHabitStreaks(String habitId) async {
+  Future<Map<String, dynamic>> getHabitStreaks(String habitId) async {
     final Database db = await database;
     final completions = await db.query(
       'habit_completions',
@@ -153,29 +153,37 @@ class DBHelper {
     );
 
     if (completions.isEmpty) {
-      return {'current_streak': 0, 'longest_streak': 0};
+      return {
+        'current_streak': 0,
+        'longest_streak': 0,
+        'streak_at_risk': false
+      };
     }
 
     int currentStreak = 0;
     int longestStreak = 0;
     int currentCount = 0;
     DateTime? lastDate;
+    bool streakAtRisk = false;
 
     // Get today's date at midnight for comparison
     final today = DateTime.now().copyWith(
         hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
 
-    // Check if the most recent completion is from today or yesterday
+    // Check if the most recent completion is from today or earlier
     final mostRecentCompletion =
         DateTime.parse(completions.first['completed_at'] as String);
     final daysSinceLastCompletion =
         today.difference(mostRecentCompletion).inDays;
 
-    // If more than 1 day has passed since last completion, current streak is 0
-    if (daysSinceLastCompletion > 1) {
+    // If 3 or more days have passed since last completion, current streak is 0
+    if (daysSinceLastCompletion >= 3) {
       currentStreak = 0;
-    } else {
-      // Calculate current streak
+      streakAtRisk = false;
+    } else if (daysSinceLastCompletion == 2) {
+      // On second day of missing, show warning and keep streak
+      streakAtRisk = true;
+      // Calculate streak up to the last completion
       for (var completion in completions) {
         final completedAt =
             DateTime.parse(completion['completed_at'] as String);
@@ -187,18 +195,38 @@ class DBHelper {
           lastDate = dateOnly;
         } else {
           final difference = lastDate.difference(dateOnly).inDays;
-
           if (difference == 1) {
-            // Consecutive day
             currentCount++;
           } else {
-            // More than one day gap, streak is broken
             break;
           }
           lastDate = dateOnly;
         }
       }
       currentStreak = currentCount;
+    } else {
+      // Calculate current streak normally for 0 or 1 day since last completion
+      for (var completion in completions) {
+        final completedAt =
+            DateTime.parse(completion['completed_at'] as String);
+        final dateOnly =
+            DateTime(completedAt.year, completedAt.month, completedAt.day);
+
+        if (lastDate == null) {
+          currentCount = 1;
+          lastDate = dateOnly;
+        } else {
+          final difference = lastDate.difference(dateOnly).inDays;
+          if (difference == 1) {
+            currentCount++;
+          } else {
+            break;
+          }
+          lastDate = dateOnly;
+        }
+      }
+      currentStreak = currentCount;
+      streakAtRisk = false;
     }
 
     // Calculate longest streak
@@ -215,12 +243,9 @@ class DBHelper {
         lastDateForLongest = dateOnly;
       } else {
         final difference = lastDateForLongest.difference(dateOnly).inDays;
-
         if (difference == 1) {
-          // Consecutive day
           countForLongest++;
         } else {
-          // Streak broken, check if this was the longest
           if (countForLongest > longestStreak) {
             longestStreak = countForLongest;
           }
@@ -230,7 +255,6 @@ class DBHelper {
       }
     }
 
-    // Check one last time for the longest streak
     if (countForLongest > longestStreak) {
       longestStreak = countForLongest;
     }
@@ -238,6 +262,7 @@ class DBHelper {
     return {
       'current_streak': currentStreak,
       'longest_streak': longestStreak,
+      'streak_at_risk': streakAtRisk
     };
   }
 }

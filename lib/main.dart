@@ -144,6 +144,20 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                         ),
                       ),
+                      if (!habit['completed_today'] &&
+                          habit['streak_at_risk'] == true)
+                        Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          child: Tooltip(
+                            message:
+                                'Complete today or your streak will reset tomorrow!',
+                            child: Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
+                          ),
+                        ),
                       if (habit['current_streak'] > 0 ||
                           habit['longest_streak'] > 0)
                         Container(
