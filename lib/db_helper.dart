@@ -92,6 +92,7 @@ class DBHelper {
         'completed_today': completion.isNotEmpty,
         'current_streak': streaks['current_streak'],
         'longest_streak': streaks['longest_streak'],
+        'streak_at_risk': streaks['streak_at_risk'],
       });
     }
 
@@ -173,8 +174,11 @@ class DBHelper {
     // Check if the most recent completion is from today or earlier
     final mostRecentCompletion =
         DateTime.parse(completions.first['completed_at'] as String);
+    final mostRecentCompletionDate = DateTime(mostRecentCompletion.year,
+        mostRecentCompletion.month, mostRecentCompletion.day);
+    final todayDate = DateTime(today.year, today.month, today.day);
     final daysSinceLastCompletion =
-        today.difference(mostRecentCompletion).inDays;
+        todayDate.difference(mostRecentCompletionDate).inDays;
 
     // If 3 or more days have passed since last completion, current streak is 0
     if (daysSinceLastCompletion >= 3) {
