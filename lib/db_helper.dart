@@ -93,6 +93,7 @@ class DBHelper {
         'current_streak': streaks['current_streak'],
         'longest_streak': streaks['longest_streak'],
         'streak_at_risk': streaks['streak_at_risk'],
+        'streak_start_date': streaks['streak_start_date'],
       });
     }
 
@@ -166,6 +167,7 @@ class DBHelper {
     int currentCount = 0;
     DateTime? lastDate;
     bool streakAtRisk = false;
+    DateTime? streakStartDate;
 
     // Get today's date at midnight for comparison
     final today = DateTime.now().copyWith(
@@ -184,6 +186,7 @@ class DBHelper {
     if (daysSinceLastCompletion >= 3) {
       currentStreak = 0;
       streakAtRisk = false;
+      streakStartDate = null;
     } else if (daysSinceLastCompletion == 2) {
       // On second day of missing, show warning and keep streak
       streakAtRisk = true;
@@ -207,6 +210,7 @@ class DBHelper {
           lastDate = dateOnly;
         }
       }
+      streakStartDate = lastDate;
       currentStreak = currentCount;
     } else {
       // Calculate current streak normally for 0 or 1 day since last completion
@@ -229,6 +233,7 @@ class DBHelper {
           lastDate = dateOnly;
         }
       }
+      streakStartDate = lastDate;
       currentStreak = currentCount;
       streakAtRisk = false;
     }
@@ -266,7 +271,8 @@ class DBHelper {
     return {
       'current_streak': currentStreak,
       'longest_streak': longestStreak,
-      'streak_at_risk': streakAtRisk
+      'streak_at_risk': streakAtRisk,
+      'streak_start_date': streakStartDate,
     };
   }
 

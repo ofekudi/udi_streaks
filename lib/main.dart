@@ -211,7 +211,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     ],
                   ),
                   subtitle: Text(
-                    'Started: ${DateTime.parse(habit['created_at']).toString().split(' ')[0]}',
+                    habit['streak_start_date'] != null
+                        ? 'Since: ${DateTime.parse(habit['streak_start_date'].toString()).toString().split(' ')[0]}'
+                        : 'No active streak',
                   ),
                   onTap: () {
                     showModalBottomSheet(
