@@ -118,243 +118,368 @@ class _MyHomePageState extends State<MyHomePage> {
               itemCount: _habits.length,
               itemBuilder: (context, index) {
                 final habit = _habits[index];
-                return ListTile(
-                  leading: IconButton(
-                    icon: Icon(
-                      habit['completed_today']
-                          ? Icons.check_circle
-                          : Icons.circle_outlined,
-                      color:
-                          habit['completed_today'] ? Colors.green : Colors.grey,
-                    ),
-                    onPressed: () async {
-                      await DBHelper().toggleHabitCompletion(habit['id']);
-                      _loadHabits();
-                    },
-                  ),
-                  title: Row(
-                    children: [
-                      Expanded(
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: IconButton(
+                        icon: Icon(
+                          habit['completed_today']
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          color: habit['completed_today']
+                              ? Colors.green
+                              : Colors.grey,
+                          size: 28,
+                        ),
+                        onPressed: () async {
+                          await DBHelper().toggleHabitCompletion(habit['id']);
+                          _loadHabits();
+                        },
+                      ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              habit['name'],
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                decoration: habit['completed_today']
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: habit['completed_today']
+                                    ? Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.7)
+                                    : Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                          if (!habit['completed_today'] &&
+                              habit['streak_at_risk'] == true)
+                            Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              child: Tooltip(
+                                message:
+                                    'Complete today or your streak will reset tomorrow!',
+                                child: Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.orange,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          if (habit['current_streak'] > 0 ||
+                              habit['longest_streak'] > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    habit['current_streak'] > 0
+                                        ? Icons.local_fire_department
+                                        : Icons.restart_alt,
+                                    size: 18,
+                                    color: habit['current_streak'] > 0
+                                        ? Colors.orange
+                                        : Colors.grey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${habit['current_streak']}',
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimaryContainer,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                  if (habit['longest_streak'] >
+                                      habit['current_streak'])
+                                    Text(
+                                      ' / ${habit['longest_streak']}',
+                                      style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onPrimaryContainer
+                                            .withOpacity(0.7),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          habit['name'],
+                          habit['streak_start_date'] != null
+                              ? 'Since: ${DateTime.parse(habit['streak_start_date'].toString()).toString().split(' ')[0]}'
+                              : 'No active streak',
                           style: TextStyle(
-                            decoration: habit['completed_today']
-                                ? TextDecoration.lineThrough
-                                : null,
+                            fontSize: 13,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.7),
                           ),
                         ),
                       ),
-                      if (!habit['completed_today'] &&
-                          habit['streak_at_risk'] == true)
-                        Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          child: Tooltip(
-                            message:
-                                'Complete today or your streak will reset tomorrow!',
-                            child: Icon(
-                              Icons.warning_amber_rounded,
-                              color: Colors.orange,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      if (habit['current_streak'] > 0 ||
-                          habit['longest_streak'] > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color:
-                                Theme.of(context).colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                habit['current_streak'] > 0
-                                    ? Icons.local_fire_department
-                                    : Icons.restart_alt,
-                                size: 16,
-                                color: habit['current_streak'] > 0
-                                    ? Colors.orange
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${habit['current_streak']}',
-                                style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.0,
-                                ),
-                              ),
-                              if (habit['longest_streak'] >
-                                  habit['current_streak'])
-                                Text(
-                                  ' / ${habit['longest_streak']}',
-                                  style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onPrimaryContainer
-                                        .withOpacity(0.7),
-                                    fontSize: 12,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 24, horizontal: 16),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          habit['name'],
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Created on ${DateTime.parse(habit['created_at']).toString().split(' ')[0]}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withOpacity(0.7),
+                                              ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  subtitle: Text(
-                    habit['streak_start_date'] != null
-                        ? 'Since: ${DateTime.parse(habit['streak_start_date'].toString()).toString().split(' ')[0]}'
-                        : 'No active streak',
-                  ),
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ListTile(
-                                title: Text(
-                                  habit['name'],
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                subtitle: Text(
-                                  'Started: ${DateTime.parse(habit['created_at']).toString().split(' ')[0]}',
-                                ),
-                              ),
-                              const Divider(),
-                              ListTile(
-                                leading: Icon(
-                                  habit['completed_today']
-                                      ? Icons.check_circle
-                                      : Icons.circle_outlined,
-                                  color: habit['completed_today']
-                                      ? Colors.green
-                                      : Colors.grey,
-                                ),
-                                title: Text(
-                                  habit['completed_today']
-                                      ? 'Completed Today'
-                                      : 'Mark as Completed',
-                                ),
-                                onTap: () async {
-                                  await DBHelper()
-                                      .toggleHabitCompletion(habit['id']);
-                                  _loadHabits();
-                                  Navigator.pop(context);
-                                },
-                              ),
-                              ListTile(
-                                leading: const Icon(Icons.history),
-                                title: const Text('Completion History'),
-                                onTap: () async {
-                                  Navigator.pop(context); // Close bottom sheet
-                                  final history = await DBHelper()
-                                      .getCompletionHistory(habit['id']);
-                                  if (context.mounted) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          title: Text(
-                                              '${habit['name']} - History'),
-                                          content: SizedBox(
-                                            width: double.maxFinite,
-                                            child: ListView.builder(
-                                              shrinkWrap: true,
-                                              itemCount: history.length,
-                                              itemBuilder: (context, index) {
-                                                final entry = history[index];
-                                                return ListTile(
-                                                  leading: CircleAvatar(
-                                                    backgroundColor:
-                                                        Theme.of(context)
+                                  const Divider(height: 1),
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(
+                                      habit['completed_today']
+                                          ? Icons.check_circle
+                                          : Icons.circle_outlined,
+                                      color: habit['completed_today']
+                                          ? Colors.green
+                                          : Colors.grey,
+                                      size: 28,
+                                    ),
+                                    title: Text(
+                                      habit['completed_today']
+                                          ? 'Completed Today'
+                                          : 'Mark as Completed',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    onTap: () async {
+                                      await DBHelper()
+                                          .toggleHabitCompletion(habit['id']);
+                                      _loadHabits();
+                                      Navigator.pop(context);
+                                    },
+                                  ),
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(
+                                      Icons.history,
+                                      size: 28,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                                    title: const Text(
+                                      'Completion History',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    onTap: () async {
+                                      Navigator.pop(
+                                          context); // Close bottom sheet
+                                      final history = await DBHelper()
+                                          .getCompletionHistory(habit['id']);
+                                      if (context.mounted) {
+                                        showDialog(
+                                          context: context,
+                                          builder: (BuildContext context) {
+                                            return AlertDialog(
+                                              title: Text(
+                                                '${habit['name']} - History',
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              content: SizedBox(
+                                                width: double.maxFinite,
+                                                child: ListView.builder(
+                                                  shrinkWrap: true,
+                                                  itemCount: history.length,
+                                                  itemBuilder:
+                                                      (context, index) {
+                                                    final entry =
+                                                        history[index];
+                                                    return ListTile(
+                                                      contentPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4,
+                                                      ),
+                                                      leading: CircleAvatar(
+                                                        backgroundColor: Theme
+                                                                .of(context)
                                                             .colorScheme
                                                             .primaryContainer,
-                                                    child: Text(
-                                                      '${history.length - index}',
-                                                      style: TextStyle(
-                                                        color: Theme.of(context)
-                                                            .colorScheme
-                                                            .onPrimaryContainer,
-                                                        fontWeight:
-                                                            FontWeight.bold,
+                                                        child: Text(
+                                                          '${history.length - index}',
+                                                          style: TextStyle(
+                                                            color: Theme.of(
+                                                                    context)
+                                                                .colorScheme
+                                                                .onPrimaryContainer,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            fontSize: 14,
+                                                          ),
+                                                        ),
                                                       ),
+                                                      title: Text(
+                                                        entry['date'],
+                                                        style: const TextStyle(
+                                                          fontSize: 14,
+                                                          fontWeight:
+                                                              FontWeight.w400,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  child: Text(
+                                                    'Close',
+                                                    style: TextStyle(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .primary,
+                                                      fontWeight:
+                                                          FontWeight.w600,
                                                     ),
                                                   ),
-                                                  title: Text(entry['date']),
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              child: const Text('Close'),
-                                              onPressed: () {
-                                                Navigator.of(context).pop();
-                                              },
-                                            ),
-                                          ],
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop();
+                                                  },
+                                                ),
+                                              ],
+                                            );
+                                          },
                                         );
-                                      },
-                                    );
-                                  }
-                                },
-                              ),
-                              ListTile(
-                                leading: const Icon(Icons.delete_outline,
-                                    color: Colors.red),
-                                title: const Text('Delete Habit'),
-                                onTap: () {
-                                  Navigator.pop(context); // Close bottom sheet
-                                  showDialog(
-                                    context: context,
-                                    builder: (BuildContext context) {
-                                      return AlertDialog(
-                                        title: const Text('Delete Habit'),
-                                        content: Text(
-                                            'Are you sure you want to delete "${habit['name']}"?'),
-                                        actions: [
-                                          TextButton(
-                                            child: const Text('Cancel'),
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                            },
-                                          ),
-                                          TextButton(
-                                            child: const Text('Delete',
-                                                style: TextStyle(
-                                                    color: Colors.red)),
-                                            onPressed: () async {
-                                              await DBHelper()
-                                                  .deleteHabit(habit['id']);
-                                              _loadHabits();
-                                              Navigator.of(context).pop();
-                                            },
-                                          ),
-                                        ],
+                                      }
+                                    },
+                                  ),
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                      size: 28,
+                                    ),
+                                    title: const Text(
+                                      'Delete Habit',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                    onTap: () {
+                                      Navigator.pop(
+                                          context); // Close bottom sheet
+                                      showDialog(
+                                        context: context,
+                                        builder: (BuildContext context) {
+                                          return AlertDialog(
+                                            title: const Text('Delete Habit'),
+                                            content: Text(
+                                                'Are you sure you want to delete "${habit['name']}"?'),
+                                            actions: [
+                                              TextButton(
+                                                child: const Text('Cancel'),
+                                                onPressed: () {
+                                                  Navigator.of(context).pop();
+                                                },
+                                              ),
+                                              TextButton(
+                                                child: const Text('Delete',
+                                                    style: TextStyle(
+                                                        color: Colors.red)),
+                                                onPressed: () async {
+                                                  await DBHelper()
+                                                      .deleteHabit(habit['id']);
+                                                  _loadHabits();
+                                                  Navigator.of(context).pop();
+                                                },
+                                              ),
+                                            ],
+                                          );
+                                        },
                                       );
                                     },
-                                  );
-                                },
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            );
+                          },
                         );
                       },
-                    );
-                  },
+                    ),
+                    if (index < _habits.length - 1)
+                      Divider(
+                        height: 1,
+                        thickness: 0.5,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.2),
+                        indent: 72,
+                      ),
+                  ],
                 );
               },
             ),
