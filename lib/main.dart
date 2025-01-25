@@ -254,6 +254,63 @@ class _MyHomePageState extends State<MyHomePage> {
                                 },
                               ),
                               ListTile(
+                                leading: const Icon(Icons.history),
+                                title: const Text('Completion History'),
+                                onTap: () async {
+                                  Navigator.pop(context); // Close bottom sheet
+                                  final history = await DBHelper()
+                                      .getCompletionHistory(habit['id']);
+                                  if (context.mounted) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (BuildContext context) {
+                                        return AlertDialog(
+                                          title: Text(
+                                              '${habit['name']} - History'),
+                                          content: SizedBox(
+                                            width: double.maxFinite,
+                                            child: ListView.builder(
+                                              shrinkWrap: true,
+                                              itemCount: history.length,
+                                              itemBuilder: (context, index) {
+                                                final entry = history[index];
+                                                return ListTile(
+                                                  leading: CircleAvatar(
+                                                    backgroundColor:
+                                                        Theme.of(context)
+                                                            .colorScheme
+                                                            .primaryContainer,
+                                                    child: Text(
+                                                      '${history.length - index}',
+                                                      style: TextStyle(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onPrimaryContainer,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  title: Text(entry['date']),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              child: const Text('Close'),
+                                              onPressed: () {
+                                                Navigator.of(context).pop();
+                                              },
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+                              ListTile(
                                 leading: const Icon(Icons.delete_outline,
                                     color: Colors.red),
                                 title: const Text('Delete Habit'),

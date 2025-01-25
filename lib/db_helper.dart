@@ -265,4 +265,35 @@ class DBHelper {
       'streak_at_risk': streakAtRisk
     };
   }
+
+  Future<List<Map<String, dynamic>>> getCompletionHistory(
+      String habitId) async {
+    final Database db = await database;
+    final completions = await db.query(
+      'habit_completions',
+      where: 'habit_id = ?',
+      whereArgs: [habitId],
+      orderBy: 'completed_at DESC',
+    );
+
+    // Group completions by date
+    final Map<String, int> dateCountMap = {};
+    for (var completion in completions) {
+      final completedAt = DateTime.parse(completion['completed_at'] as String);
+      final dateStr =
+          DateTime(completedAt.year, completedAt.month, completedAt.day)
+              .toIso8601String()
+              .split('T')[0];
+
+      dateCountMap[dateStr] = (dateCountMap[dateStr] ?? 0) + 1;
+    }
+
+    // Convert to list of maps
+    return dateCountMap.entries
+        .map((entry) => {
+              'date': entry.key,
+              'count': entry.value,
+            })
+        .toList();
+  }
 }
