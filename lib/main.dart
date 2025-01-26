@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'db_helper.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:flutter/foundation.dart' as foundation;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,28 +78,81 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _incrementCounter() {
+    String? selectedEmoji; // Default is null
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Start a new streak!'),
-          content: TextField(
-            controller: _textController,
-            decoration: const InputDecoration(hintText: "Type something here"),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Done'),
-              onPressed: () async {
-                if (_textController.text.isNotEmpty) {
-                  await DBHelper().insertHabit(_textController.text);
-                  _loadHabits();
-                }
-                _textController.clear();
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Start a new streak!'),
+              content: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return SizedBox(
+                            height: 350,
+                            child: EmojiPicker(
+                              onEmojiSelected: (category, emoji) {
+                                setState(() => selectedEmoji = emoji.emoji);
+                                Navigator.pop(context);
+                              },
+                            ),
+                          );
+                        },
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withOpacity(0.2),
+                        ),
+                      ),
+                      child: Text(
+                        selectedEmoji ?? '😊',
+                        style: TextStyle(
+                          fontSize: 24,
+                          color: selectedEmoji == null ? Colors.grey : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _textController,
+                      decoration: const InputDecoration(
+                          hintText: "Type something here"),
+                    ),
+                  ),
+                ],
+              ),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('Done'),
+                  onPressed: () async {
+                    if (_textController.text.isNotEmpty) {
+                      final habitName = selectedEmoji != null
+                          ? '$selectedEmoji ${_textController.text}'
+                          : _textController.text;
+                      await DBHelper().insertHabit(habitName);
+                      _loadHabits();
+                    }
+                    _textController.clear();
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
