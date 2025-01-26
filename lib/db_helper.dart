@@ -190,7 +190,7 @@ class DBHelper {
     } else {
       // Calculate current streak allowing one day gap
       DateTime? lastDate;
-      int gapCount = 0;
+      int totalGaps = 0;
 
       for (var completion in completions) {
         final completedAt =
@@ -210,11 +210,7 @@ class DBHelper {
             streakStartDate = dateOnly;
           } else if (difference == 2) {
             // One day gap
-            gapCount++;
-            if (gapCount > 1) {
-              // More than one gap, break the streak
-              break;
-            }
+            totalGaps++;
             currentCount++;
             streakStartDate = dateOnly;
           } else {
