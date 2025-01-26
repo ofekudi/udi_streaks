@@ -187,33 +187,11 @@ class DBHelper {
       currentStreak = 0;
       streakAtRisk = false;
       streakStartDate = null;
-    } else if (daysSinceLastCompletion == 2) {
-      // On second day of missing, show warning and keep streak
-      streakAtRisk = true;
-      // Calculate streak up to the last completion
-      for (var completion in completions) {
-        final completedAt =
-            DateTime.parse(completion['completed_at'] as String);
-        final dateOnly =
-            DateTime(completedAt.year, completedAt.month, completedAt.day);
-
-        if (lastDate == null) {
-          currentCount = 1;
-          lastDate = dateOnly;
-        } else {
-          final difference = lastDate.difference(dateOnly).inDays;
-          if (difference == 1) {
-            currentCount++;
-          } else {
-            break;
-          }
-          lastDate = dateOnly;
-        }
-      }
-      streakStartDate = lastDate;
-      currentStreak = currentCount;
     } else {
-      // Calculate current streak normally for 0 or 1 day since last completion
+      // Calculate current streak allowing one day gap
+      DateTime? lastDate;
+      int gapCount = 0;
+
       for (var completion in completions) {
         final completedAt =
             DateTime.parse(completion['completed_at'] as String);
@@ -223,19 +201,32 @@ class DBHelper {
         if (lastDate == null) {
           currentCount = 1;
           lastDate = dateOnly;
+          streakStartDate = dateOnly;
         } else {
           final difference = lastDate.difference(dateOnly).inDays;
           if (difference == 1) {
+            // Consecutive days
             currentCount++;
+            streakStartDate = dateOnly;
+          } else if (difference == 2) {
+            // One day gap
+            gapCount++;
+            if (gapCount > 1) {
+              // More than one gap, break the streak
+              break;
+            }
+            currentCount++;
+            streakStartDate = dateOnly;
           } else {
+            // More than one day gap, break the streak
             break;
           }
           lastDate = dateOnly;
         }
       }
-      streakStartDate = lastDate;
+
       currentStreak = currentCount;
-      streakAtRisk = false;
+      streakAtRisk = daysSinceLastCompletion == 2;
     }
 
     // Calculate longest streak
