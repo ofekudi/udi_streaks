@@ -226,14 +226,17 @@ class _MyHomePageState extends State<MyHomePage> {
                               ),
                             ),
                           if (habit['current_streak'] > 0 ||
-                              habit['longest_streak'] > 0)
+                              habit['longest_streak'] > 0 ||
+                              habit['negative_streak'] < 0)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primaryContainer,
+                                color: habit['negative_streak'] < 0
+                                    ? Colors.red.withOpacity(0.1)
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -242,28 +245,38 @@ class _MyHomePageState extends State<MyHomePage> {
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    habit['current_streak'] > 0
-                                        ? Icons.local_fire_department
-                                        : Icons.restart_alt,
-                                    size: 18,
-                                    color: habit['current_streak'] > 0
-                                        ? Colors.orange
-                                        : Colors.grey,
+                                    habit['negative_streak'] < 0
+                                        ? Icons.close_rounded
+                                        : habit['current_streak'] > 0
+                                            ? Icons.local_fire_department
+                                            : Icons.restart_alt,
+                                    size:
+                                        habit['negative_streak'] < 0 ? 20 : 18,
+                                    color: habit['negative_streak'] < 0
+                                        ? Colors.red
+                                        : habit['current_streak'] > 0
+                                            ? Colors.orange
+                                            : Colors.grey,
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    '${habit['current_streak']}',
+                                    habit['negative_streak'] < 0
+                                        ? '${habit['negative_streak']}'
+                                        : '${habit['current_streak']}',
                                     style: TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onPrimaryContainer,
+                                      color: habit['negative_streak'] < 0
+                                          ? Colors.red
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
                                       height: 1.0,
                                     ),
                                   ),
                                   if (habit['longest_streak'] >
-                                      habit['current_streak'])
+                                          habit['current_streak'] &&
+                                      habit['negative_streak'] >= 0)
                                     Text(
                                       ' / ${habit['longest_streak']}',
                                       style: TextStyle(

@@ -94,6 +94,7 @@ class DBHelper {
         'longest_streak': streaks['longest_streak'],
         'streak_at_risk': streaks['streak_at_risk'],
         'streak_start_date': streaks['streak_start_date'],
+        'negative_streak': streaks['negative_streak'],
       });
     }
 
@@ -158,7 +159,9 @@ class DBHelper {
       return {
         'current_streak': 0,
         'longest_streak': 0,
-        'streak_at_risk': false
+        'streak_at_risk': false,
+        'streak_start_date': null,
+        'negative_streak': 0
       };
     }
 
@@ -168,6 +171,7 @@ class DBHelper {
     DateTime? lastDate;
     bool streakAtRisk = false;
     DateTime? streakStartDate;
+    int negativeStreak = 0;
 
     // Get today's date at midnight for comparison
     final today = DateTime.now().copyWith(
@@ -182,12 +186,15 @@ class DBHelper {
     final daysSinceLastCompletion =
         todayDate.difference(mostRecentCompletionDate).inDays;
 
-    // If 3 or more days have passed since last completion, current streak is 0
+    // Calculate negative streak if more than 3 days have passed
     if (daysSinceLastCompletion >= 3) {
       currentStreak = 0;
       streakAtRisk = false;
       streakStartDate = null;
+      // Calculate negative streak (days beyond 3)
+      negativeStreak = -(daysSinceLastCompletion - 3);
     } else {
+      negativeStreak = 0; // Explicitly set to 0 when not in negative streak
       // Calculate current streak allowing one day gap
       DateTime? lastDate;
       int totalGaps = 0;
@@ -260,6 +267,7 @@ class DBHelper {
       'longest_streak': longestStreak,
       'streak_at_risk': streakAtRisk,
       'streak_start_date': streakStartDate,
+      'negative_streak': negativeStreak
     };
   }
 
