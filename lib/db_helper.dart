@@ -197,7 +197,6 @@ class DBHelper {
       negativeStreak = 0; // Explicitly set to 0 when not in negative streak
       // Calculate current streak allowing one day gap
       DateTime? lastDate;
-      int totalGaps = 0;
 
       for (var completion in completions) {
         final completedAt =
@@ -211,13 +210,8 @@ class DBHelper {
           streakStartDate = dateOnly;
         } else {
           final difference = lastDate.difference(dateOnly).inDays;
-          if (difference == 1) {
-            // Consecutive days
-            currentCount++;
-            streakStartDate = dateOnly;
-          } else if (difference == 2) {
-            // One day gap
-            totalGaps++;
+          if (difference <= 2) {
+            // Count the day but don't increment for the gap
             currentCount++;
             streakStartDate = dateOnly;
           } else {
@@ -246,9 +240,11 @@ class DBHelper {
         lastDateForLongest = dateOnly;
       } else {
         final difference = lastDateForLongest.difference(dateOnly).inDays;
-        if (difference == 1) {
+        if (difference <= 2) {
+          // Count the day but don't increment for the gap
           countForLongest++;
         } else {
+          // More than one day gap, break the streak
           if (countForLongest > longestStreak) {
             longestStreak = countForLongest;
           }
