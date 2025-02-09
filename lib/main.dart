@@ -327,14 +327,99 @@ class _MyHomePageState extends State<MyHomePage> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          habit['name'],
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleSmall
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w500,
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            onTap: () {
+                                              Navigator.pop(
+                                                  context); // Close bottom sheet
+                                              final TextEditingController
+                                                  nameController =
+                                                  TextEditingController(
+                                                      text: habit['name']);
+                                              showDialog(
+                                                context: context,
+                                                builder:
+                                                    (BuildContext context) {
+                                                  return AlertDialog(
+                                                    title: const Text(
+                                                        'Edit Habit Name'),
+                                                    content: TextField(
+                                                      controller:
+                                                          nameController,
+                                                      decoration:
+                                                          const InputDecoration(
+                                                        hintText:
+                                                            "Enter new name",
+                                                      ),
+                                                      autofocus: true,
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        child: const Text(
+                                                            'Cancel'),
+                                                        onPressed: () {
+                                                          Navigator.of(context)
+                                                              .pop();
+                                                        },
+                                                      ),
+                                                      TextButton(
+                                                        child:
+                                                            const Text('Save'),
+                                                        onPressed: () async {
+                                                          if (nameController
+                                                              .text
+                                                              .isNotEmpty) {
+                                                            await DBHelper()
+                                                                .updateHabitName(
+                                                                    habit['id'],
+                                                                    nameController
+                                                                        .text);
+                                                            _loadHabits();
+                                                            Navigator.of(
+                                                                    context)
+                                                                .pop();
+                                                          }
+                                                        },
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              );
+                                            },
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 8,
+                                                      horizontal: 4),
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      habit['name'],
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .titleSmall
+                                                          ?.copyWith(
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  Icon(
+                                                    Icons.edit,
+                                                    size: 20,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                        .withOpacity(0.85),
+                                                  ),
+                                                ],
                                               ),
+                                            ),
+                                          ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(

@@ -297,4 +297,17 @@ class DBHelper {
             })
         .toList();
   }
+
+  Future<void> updateHabitName(String id, String newName) async {
+    final Database db = await database;
+    await db.update(
+      'habits',
+      {
+        'name': newName,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
 }
