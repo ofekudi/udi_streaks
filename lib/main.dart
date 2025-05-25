@@ -180,14 +180,24 @@ class _MyHomePageState extends State<MyHomePage> {
                         icon: Icon(
                           habit['completed_today']
                               ? Icons.check_circle
-                              : Icons.circle_outlined,
+                              : habit['skipped_today']
+                                  ? Icons.not_interested
+                                  : Icons.circle_outlined,
                           color: habit['completed_today']
                               ? Colors.green
-                              : Colors.grey,
+                              : habit['skipped_today']
+                                  ? Colors.orange
+                                  : Colors.grey,
                           size: 28,
                         ),
                         onPressed: () async {
-                          await DBHelper().toggleHabitCompletion(habit['id']);
+                          if (habit['skipped_today']) {
+                            // If skipped, un-skip it
+                            await DBHelper().toggleHabitSkip(habit['id']);
+                          } else {
+                            // If not skipped, toggle completion
+                            await DBHelper().toggleHabitCompletion(habit['id']);
+                          }
                           _loadHabits();
                         },
                       ),
@@ -207,11 +217,17 @@ class _MyHomePageState extends State<MyHomePage> {
                                         .colorScheme
                                         .onSurface
                                         .withOpacity(0.7)
-                                    : Theme.of(context).colorScheme.onSurface,
+                                    : habit['skipped_today']
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withOpacity(0.3)
+                                        : Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                           ),
                           if (!habit['completed_today'] &&
+                              !habit['skipped_today'] &&
                               habit['streak_at_risk'] == true)
                             Container(
                               margin: const EdgeInsets.only(right: 8),
@@ -465,6 +481,34 @@ class _MyHomePageState extends State<MyHomePage> {
                                       Navigator.pop(context);
                                     },
                                   ),
+                                  if (!habit['completed_today'])
+                                    ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading: Icon(
+                                        habit['skipped_today']
+                                            ? Icons.undo
+                                            : Icons.not_interested,
+                                        color: habit['skipped_today']
+                                            ? Colors.blue
+                                            : Colors.orange,
+                                        size: 28,
+                                      ),
+                                      title: Text(
+                                        habit['skipped_today']
+                                            ? 'Unskip for Today'
+                                            : 'Skip for Today',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      onTap: () async {
+                                        await DBHelper()
+                                            .toggleHabitSkip(habit['id']);
+                                        _loadHabits();
+                                        Navigator.pop(context);
+                                      },
+                                    ),
                                   ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     leading: Icon(
@@ -557,6 +601,206 @@ class _MyHomePageState extends State<MyHomePage> {
                                                   ),
                                                   onPressed: () {
                                                     Navigator.of(context).pop();
+                                                  },
+                                                ),
+                                                TextButton(
+                                                  child: Text(
+                                                    'Report Retroactively',
+                                                    style: TextStyle(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .primary,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  onPressed: () async {
+                                                    final DateTime? pickedDate =
+                                                        await showDatePicker(
+                                                      context: context,
+                                                      initialDate:
+                                                          DateTime.now(),
+                                                      firstDate: DateTime(2000),
+                                                      lastDate: DateTime.now(),
+                                                    );
+
+                                                    if (pickedDate != null &&
+                                                        context.mounted) {
+                                                      await DBHelper()
+                                                          .addRetroactiveCompletion(
+                                                        habit['id'],
+                                                        pickedDate,
+                                                      );
+                                                      _loadHabits();
+
+                                                      // Refresh the history
+                                                      final updatedHistory =
+                                                          await DBHelper()
+                                                              .getCompletionHistory(
+                                                                  habit['id']);
+
+                                                      if (context.mounted) {
+                                                        Navigator.of(context)
+                                                            .pop(); // Close current dialog
+                                                        // Show updated history
+                                                        showDialog(
+                                                          context: context,
+                                                          builder: (BuildContext
+                                                              context) {
+                                                            return AlertDialog(
+                                                              title: Text(
+                                                                '${habit['name']} - History',
+                                                                style:
+                                                                    const TextStyle(
+                                                                  fontSize: 16,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
+                                                                ),
+                                                              ),
+                                                              content: SizedBox(
+                                                                width: double
+                                                                    .maxFinite,
+                                                                child: ListView
+                                                                    .builder(
+                                                                  shrinkWrap:
+                                                                      true,
+                                                                  itemCount:
+                                                                      updatedHistory
+                                                                          .length,
+                                                                  itemBuilder:
+                                                                      (context,
+                                                                          index) {
+                                                                    final entry =
+                                                                        updatedHistory[
+                                                                            index];
+                                                                    return ListTile(
+                                                                      contentPadding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            8,
+                                                                        vertical:
+                                                                            4,
+                                                                      ),
+                                                                      leading:
+                                                                          CircleAvatar(
+                                                                        backgroundColor: Theme.of(context)
+                                                                            .colorScheme
+                                                                            .primaryContainer,
+                                                                        child:
+                                                                            Text(
+                                                                          '${updatedHistory.length - index}',
+                                                                          style:
+                                                                              TextStyle(
+                                                                            color:
+                                                                                Theme.of(context).colorScheme.onPrimaryContainer,
+                                                                            fontWeight:
+                                                                                FontWeight.w500,
+                                                                            fontSize:
+                                                                                14,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      title:
+                                                                          Text(
+                                                                        entry[
+                                                                            'date'],
+                                                                        style:
+                                                                            const TextStyle(
+                                                                          fontSize:
+                                                                              14,
+                                                                          fontWeight:
+                                                                              FontWeight.w400,
+                                                                        ),
+                                                                      ),
+                                                                    );
+                                                                  },
+                                                                ),
+                                                              ),
+                                                              actions: [
+                                                                TextButton(
+                                                                  child: Text(
+                                                                    'Close',
+                                                                    style:
+                                                                        TextStyle(
+                                                                      color: Theme.of(
+                                                                              context)
+                                                                          .colorScheme
+                                                                          .primary,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w600,
+                                                                    ),
+                                                                  ),
+                                                                  onPressed:
+                                                                      () {
+                                                                    Navigator.of(
+                                                                            context)
+                                                                        .pop();
+                                                                  },
+                                                                ),
+                                                                TextButton(
+                                                                  child: Text(
+                                                                    'Report Retroactively',
+                                                                    style:
+                                                                        TextStyle(
+                                                                      color: Theme.of(
+                                                                              context)
+                                                                          .colorScheme
+                                                                          .primary,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w600,
+                                                                    ),
+                                                                  ),
+                                                                  onPressed:
+                                                                      () async {
+                                                                    final DateTime?
+                                                                        pickedDate =
+                                                                        await showDatePicker(
+                                                                      context:
+                                                                          context,
+                                                                      initialDate:
+                                                                          DateTime
+                                                                              .now(),
+                                                                      firstDate:
+                                                                          DateTime(
+                                                                              2000),
+                                                                      lastDate:
+                                                                          DateTime
+                                                                              .now(),
+                                                                    );
+
+                                                                    if (pickedDate !=
+                                                                            null &&
+                                                                        context
+                                                                            .mounted) {
+                                                                      await DBHelper()
+                                                                          .addRetroactiveCompletion(
+                                                                        habit[
+                                                                            'id'],
+                                                                        pickedDate,
+                                                                      );
+                                                                      _loadHabits();
+                                                                      Navigator.of(
+                                                                              context)
+                                                                          .pop();
+                                                                      // Show the history dialog again with updated data
+                                                                      if (context
+                                                                          .mounted) {
+                                                                        Navigator.of(context)
+                                                                            .pop();
+                                                                      }
+                                                                    }
+                                                                  },
+                                                                ),
+                                                              ],
+                                                            );
+                                                          },
+                                                        );
+                                                      }
+                                                    }
                                                   },
                                                 ),
                                               ],

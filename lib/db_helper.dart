@@ -21,8 +21,9 @@ class DBHelper {
     String path = join(await getDatabasesPath(), 'habits_database.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -44,6 +45,29 @@ class DBHelper {
         FOREIGN KEY(habit_id) REFERENCES habits(id) ON DELETE CASCADE
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE habit_skips(
+        id TEXT PRIMARY KEY,
+        habit_id TEXT NOT NULL,
+        skipped_at TEXT NOT NULL,
+        FOREIGN KEY(habit_id) REFERENCES habits(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    // Handle upgrades from version 1 to version 2
+    if (oldVersion == 1) {
+      await db.execute('''
+        CREATE TABLE habit_skips(
+          id TEXT PRIMARY KEY,
+          habit_id TEXT NOT NULL,
+          skipped_at TEXT NOT NULL,
+          FOREIGN KEY(habit_id) REFERENCES habits(id) ON DELETE CASCADE
+        )
+      ''');
+    }
   }
 
   Future<String> insertHabit(String name) async {
@@ -77,6 +101,14 @@ class DBHelper {
 
     // For each habit, check if it was completed today and get streaks
     for (var habit in habits) {
+      // Check if habit is skipped today
+      final skip = await db.query(
+        'habit_skips',
+        where: 'habit_id = ? AND skipped_at >= ?',
+        whereArgs: [habit['id'], today.toIso8601String()],
+        limit: 1,
+      );
+
       final completion = await db.query(
         'habit_completions',
         where: 'habit_id = ? AND completed_at >= ?',
@@ -86,10 +118,11 @@ class DBHelper {
 
       final streaks = await getHabitStreaks(habit['id']);
 
-      // Create a new map with all the original data plus the completed_today status
+      // Create a new map with all the original data plus the status
       mutableHabits.add({
         ...habit,
         'completed_today': completion.isNotEmpty,
+        'skipped_today': skip.isNotEmpty,
         'current_streak': streaks['current_streak'],
         'longest_streak': streaks['longest_streak'],
         'streak_at_risk': streaks['streak_at_risk'],
@@ -98,9 +131,15 @@ class DBHelper {
       });
     }
 
-    // Sort habits by current streak in descending order
-    mutableHabits.sort((a, b) =>
-        (b['current_streak'] as int).compareTo(a['current_streak'] as int));
+    // Sort habits: non-skipped habits first (by current streak descending), then skipped habits
+    mutableHabits.sort((a, b) {
+      // If one is skipped and the other isn't, prioritize the non-skipped one
+      if (a['skipped_today'] && !b['skipped_today']) return 1;
+      if (!a['skipped_today'] && b['skipped_today']) return -1;
+      
+      // If both have the same skip status, sort by current streak (descending)
+      return (b['current_streak'] as int).compareTo(a['current_streak'] as int);
+    });
 
     return mutableHabits;
   }
@@ -309,5 +348,143 @@ class DBHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<void> addRetroactiveCompletion(String habitId, DateTime date) async {
+    final Database db = await database;
+    final targetDate = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      12,
+      34,
+    );
+
+    // Check if habit was already completed on that date
+    final completion = await db.query(
+      'habit_completions',
+      where: 'habit_id = ? AND date(completed_at) = date(?)',
+      whereArgs: [habitId, targetDate.toIso8601String()],
+    );
+
+    if (completion.isEmpty) {
+      // Add retroactive completion
+      await db.insert(
+        'habit_completions',
+        {
+          'id': uuid.v4(),
+          'habit_id': habitId,
+          'completed_at': targetDate.toIso8601String(),
+        },
+      );
+    }
+  }
+
+  Future<void> toggleHabitSkip(String habitId) async {
+    final Database db = await database;
+    final today = DateTime.now().copyWith(
+        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+
+    // Check if habit is already skipped today
+    final skip = await db.query(
+      'habit_skips',
+      where: 'habit_id = ? AND skipped_at >= ?',
+      whereArgs: [habitId, today.toIso8601String()],
+    );
+
+    if (skip.isEmpty) {
+      // Skip for today
+      await db.insert(
+        'habit_skips',
+        {
+          'id': uuid.v4(),
+          'habit_id': habitId,
+          'skipped_at': today.toIso8601String(),
+        },
+      );
+    } else {
+      // Un-skip (remove skip record)
+      await db.delete(
+        'habit_skips',
+        where: 'habit_id = ? AND skipped_at >= ?',
+        whereArgs: [habitId, today.toIso8601String()],
+      );
+    }
+  }
+
+  Future<bool> isHabitSkippedToday(String habitId) async {
+    final Database db = await database;
+    final today = DateTime.now().copyWith(
+        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+
+    final skip = await db.query(
+      'habit_skips',
+      where: 'habit_id = ? AND skipped_at >= ?',
+      whereArgs: [habitId, today.toIso8601String()],
+      limit: 1,
+    );
+
+    return skip.isNotEmpty;
+  }
+
+  Future<void> toggleHabitState(String habitId) async {
+    final Database db = await database;
+    final today = DateTime.now().copyWith(
+        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+
+    // Check current state
+    final completion = await db.query(
+      'habit_completions',
+      where: 'habit_id = ? AND completed_at >= ?',
+      whereArgs: [habitId, today.toIso8601String()],
+      limit: 1,
+    );
+
+    final skip = await db.query(
+      'habit_skips',
+      where: 'habit_id = ? AND skipped_at >= ?',
+      whereArgs: [habitId, today.toIso8601String()],
+      limit: 1,
+    );
+
+    bool isCompleted = completion.isNotEmpty;
+    bool isSkipped = skip.isNotEmpty;
+
+    if (!isCompleted && !isSkipped) {
+      // State: Incomplete → Complete
+      await db.insert(
+        'habit_completions',
+        {
+          'id': uuid.v4(),
+          'habit_id': habitId,
+          'completed_at': DateTime.now().toIso8601String(),
+        },
+      );
+    } else if (isCompleted && !isSkipped) {
+      // State: Complete → Skip
+      // Remove completion
+      await db.delete(
+        'habit_completions',
+        where: 'habit_id = ? AND completed_at >= ?',
+        whereArgs: [habitId, today.toIso8601String()],
+      );
+      // Add skip
+      await db.insert(
+        'habit_skips',
+        {
+          'id': uuid.v4(),
+          'habit_id': habitId,
+          'skipped_at': today.toIso8601String(),
+        },
+      );
+    } else if (!isCompleted && isSkipped) {
+      // State: Skip → Incomplete
+      // Remove skip
+      await db.delete(
+        'habit_skips',
+        where: 'habit_id = ? AND skipped_at >= ?',
+        whereArgs: [habitId, today.toIso8601String()],
+      );
+    }
   }
 }
