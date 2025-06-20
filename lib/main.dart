@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'db_helper.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/foundation.dart' as foundation;
+import 'package:home_widget/home_widget.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,7 +59,7 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   int _counter = 0;
   final TextEditingController _textController = TextEditingController();
   List<Map<String, dynamic>> _habits = [];
@@ -66,7 +67,24 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadHabits();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // Update widget when app resumes to ensure synchronization
+    if (state == AppLifecycleState.resumed) {
+      _updateHomeWidget();
+    }
   }
 
   Future<void> _loadHabits() async {
@@ -75,6 +93,28 @@ class _MyHomePageState extends State<MyHomePage> {
       _habits = habits;
       _counter = habits.length;
     });
+    // Update widget after loading habits
+    await _updateHomeWidget();
+  }
+
+  Future<void> _updateHomeWidget() async {
+    try {
+      final streakCounts = await DBHelper().getTodayStreakCounts();
+      await HomeWidget.saveWidgetData<int>('completed', streakCounts['completed']!);
+      await HomeWidget.saveWidgetData<int>('total', streakCounts['total']!);
+      await HomeWidget.updateWidget(
+        name: 'StreakWidgetProvider',
+      );
+    } catch (e) {
+      return;
+    }
+  }
+
+  // Helper method to ensure widget updates after any habit change
+  Future<void> _refreshHabitsAndUpdateWidget() async {
+    await _loadHabits();
+    // Additional explicit widget update to ensure synchronization
+    await _updateHomeWidget();
   }
 
   void _incrementCounter() {
@@ -144,7 +184,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           ? '$selectedEmoji ${_textController.text}'
                           : _textController.text;
                       await DBHelper().insertHabit(habitName);
-                      _loadHabits();
+                      await _refreshHabitsAndUpdateWidget();
                     }
                     _textController.clear();
                     Navigator.of(context).pop();
@@ -198,7 +238,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             // If not skipped, toggle completion
                             await DBHelper().toggleHabitCompletion(habit['id']);
                           }
-                          _loadHabits();
+                          await _refreshHabitsAndUpdateWidget();
                         },
                       ),
                       title: Row(
@@ -393,7 +433,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                                     habit['id'],
                                                                     nameController
                                                                         .text);
-                                                            _loadHabits();
+                                                            await _refreshHabitsAndUpdateWidget();
                                                             Navigator.of(
                                                                     context)
                                                                 .pop();
@@ -477,7 +517,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                     onTap: () async {
                                       await DBHelper()
                                           .toggleHabitCompletion(habit['id']);
-                                      _loadHabits();
+                                      await _refreshHabitsAndUpdateWidget();
                                       Navigator.pop(context);
                                     },
                                   ),
@@ -505,7 +545,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       onTap: () async {
                                         await DBHelper()
                                             .toggleHabitSkip(habit['id']);
-                                        _loadHabits();
+                                        await _refreshHabitsAndUpdateWidget();
                                         Navigator.pop(context);
                                       },
                                     ),
@@ -631,7 +671,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                         habit['id'],
                                                         pickedDate,
                                                       );
-                                                      _loadHabits();
+                                                      await _refreshHabitsAndUpdateWidget();
 
                                                       // Refresh the history
                                                       final updatedHistory =
@@ -782,7 +822,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                                             'id'],
                                                                         pickedDate,
                                                                       );
-                                                                      _loadHabits();
+                                                                      await _refreshHabitsAndUpdateWidget();
                                                                       Navigator.of(
                                                                               context)
                                                                           .pop();
@@ -849,7 +889,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                 onPressed: () async {
                                                   await DBHelper()
                                                       .deleteHabit(habit['id']);
-                                                  _loadHabits();
+                                                  await _refreshHabitsAndUpdateWidget();
                                                   Navigator.of(context).pop();
                                                 },
                                               ),

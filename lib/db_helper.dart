@@ -487,4 +487,43 @@ class DBHelper {
       );
     }
   }
+
+  /// Get today's streak counts for widget display
+  Future<Map<String, int>> getTodayStreakCounts() async {
+    try {
+      final Database db = await database;
+      final today = DateTime.now().copyWith(
+          hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+
+      // Get all habits
+      final habits = await db.query('habits');
+      
+      int completed = 0;
+      int total = habits.length;
+
+      // Count completed habits for today (excluding skipped ones)
+      for (var habit in habits) {
+        final completion = await db.query(
+          'habit_completions',
+          where: 'habit_id = ? AND completed_at >= ?',
+          whereArgs: [habit['id'], today.toIso8601String()],
+          limit: 1,
+        );
+
+        if (completion.isNotEmpty) {
+          completed++;
+        }
+      }
+
+      return {
+        'completed': completed,
+        'total': total,
+      };
+    } catch (e) {
+      return {
+        'completed': 0,
+        'total': 0,
+      };
+    }
+  }
 }

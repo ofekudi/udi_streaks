@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/streak_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:text="0/0"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:gravity="center" />
+
+    <ProgressBar
+        android:id="@+id/streak_progress"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_below="@id/streak_count"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="12dp"
+        android:max="5"
+        android:progress="1"
+        android:progressDrawable="@drawable/widget_progress"
+        android:indeterminate="false" />
+
+    <TextView
+        android:id="@+id/app_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/streak_progress"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="8dp"
+        android:text="UdiStreaks"
+        android:textSize="10sp"
+        android:textColor="#CCFFFFFF"
+        android:textStyle="normal"
+        android:gravity="center" />
+
+</RelativeLayout> 
