@@ -102,6 +102,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       final streakCounts = await DBHelper().getTodayStreakCounts();
       await HomeWidget.saveWidgetData<int>('completed', streakCounts['completed']!);
       await HomeWidget.saveWidgetData<int>('total', streakCounts['total']!);
+      await HomeWidget.saveWidgetData<String>('lastUpdateDate', DateTime.now().toIso8601String().split('T')[0]);
       await HomeWidget.updateWidget(
         name: 'StreakWidgetProvider',
       );

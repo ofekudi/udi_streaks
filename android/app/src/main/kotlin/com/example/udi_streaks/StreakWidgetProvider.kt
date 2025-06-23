@@ -43,6 +43,13 @@ class StreakWidgetProvider : AppWidgetProvider() {
             )
             Log.d(TAG, "Updating ${appWidgetIds.size} widgets")
             onUpdate(context, appWidgetManager, appWidgetIds)
+        } else if (Intent.ACTION_DATE_CHANGED == intent.action) {
+            Log.d(TAG, "Date changed – resetting widget counts")
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val appWidgetIds = appWidgetManager.getAppWidgetIds(
+                android.content.ComponentName(context, StreakWidgetProvider::class.java)
+            )
+            onUpdate(context, appWidgetManager, appWidgetIds)
         }
     }
 
@@ -55,8 +62,21 @@ class StreakWidgetProvider : AppWidgetProvider() {
             // Get widget data from SharedPreferences
             val widgetData = HomeWidgetPlugin.getData(context)
             
-            val completed = widgetData.getInt("completed", 0)
-            val total = widgetData.getInt("total", 0)
+            var completed = widgetData.getInt("completed", 0)
+            var total = widgetData.getInt("total", 0)
+            
+            val lastUpdateDate = widgetData.getString("lastUpdateDate", null)
+            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+
+            if (lastUpdateDate == null || lastUpdateDate != todayStr) {
+                // Reset completed count for the new day
+                completed = 0
+                // Persist the reset values so subsequent updates are consistent
+                val editor = widgetData.edit()
+                editor.putInt("completed", completed)
+                editor.putString("lastUpdateDate", todayStr)
+                editor.apply()
+            }
             
             val streakText = "$completed/$total"
             Log.d(TAG, "Widget #$appWidgetId updating with: $streakText")

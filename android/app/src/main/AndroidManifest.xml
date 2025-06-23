@@ -34,9 +34,13 @@
         <!-- Widget Provider -->
         <receiver
             android:name="com.example.udi_streaks.StreakWidgetProvider"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+                <!-- Trigger updates at midnight when the date changes -->
+                <action android:name="android.intent.action.DATE_CHANGED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
