@@ -501,8 +501,20 @@ class DBHelper {
       int completed = 0;
       int total = habits.length;
 
-      // Count completed habits for today (excluding skipped ones)
+      // Count completed habits for today; skipped-today habits drop out of the goal entirely.
       for (var habit in habits) {
+        final skip = await db.query(
+          'habit_skips',
+          where: 'habit_id = ? AND skipped_at >= ?',
+          whereArgs: [habit['id'], today.toIso8601String()],
+          limit: 1,
+        );
+
+        if (skip.isNotEmpty) {
+          total--;
+          continue;
+        }
+
         final completion = await db.query(
           'habit_completions',
           where: 'habit_id = ? AND completed_at >= ?',
