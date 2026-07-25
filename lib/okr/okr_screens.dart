@@ -334,6 +334,31 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     return null;
   }
 
+  /// Records one entry against this key result, the two ways the Record page
+  /// does it: a COUNT is a one-tap +1, anything else is asked for its value.
+  ///
+  /// Both go through `log_value.dart`, so what lands in the log is the same
+  /// whichever surface you used.
+  Future<void> _record() async {
+    if (kr['aggregation'] == 'COUNT') {
+      await bumpKr(kr);
+      await _load();
+      return;
+    }
+    final raw = await promptLogValue(context,
+        title: kr['title'] as String, unit: kr['unit'] as String?);
+    // Null is a cancel; empty is a submitted blank, which logKrValue rejects.
+    if (raw == null || !mounted) return;
+    if (!await logKrValue(kr, raw)) {
+      if (raw.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text(kLogValueHelp)));
+      }
+      return;
+    }
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final objective = kr['objective_title'] as String?;
@@ -355,6 +380,14 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
             ),
         ],
       ),
+      floatingActionButton: widget.editable
+          ? FloatingActionButton.extended(
+              heroTag: 'kr_detail_record',
+              onPressed: _record,
+              icon: const Icon(Icons.add),
+              label: const Text('Record'),
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -371,6 +404,8 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                 const SizedBox(height: kGapXl),
                 const SectionHeader('History'),
                 if (_series.isEmpty) _historyEmpty() else ..._history(),
+                // Room to scroll the last entry clear of the FAB.
+                const SizedBox(height: 80),
               ],
             ),
     );
@@ -470,6 +505,8 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     return null;
   }
 
+  /// States that the log is empty and stops there. What to do about it is the
+  /// Record button's job, and where entries go is evident once there is one.
   Widget _historyEmpty() {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
@@ -480,14 +517,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
           Icon(Icons.show_chart, size: 32, color: muted),
           const SizedBox(height: kGapSm),
           Text('Nothing logged yet',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: kGapXs),
-          Text(
-              'Log this from the Record page. Entries land here under the '
-              'quarter they belong to.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+              style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
         ],
       ),
     );

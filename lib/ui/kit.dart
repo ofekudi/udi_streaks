@@ -243,6 +243,36 @@ Future<String?> promptText(BuildContext context,
   );
 }
 
+/// Asks for one value to log, returning the raw text the user typed or null if
+/// they backed out. Parsing is the caller's job, so the notation survives.
+///
+/// A dialog rather than an inline field: the Record page has a row to expand
+/// under, a screen with a FAB does not.
+Future<String?> promptLogValue(BuildContext context,
+    {required String title, String? unit}) {
+  final controller = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text(title),
+      content: LogValueField(
+        controller: controller,
+        unit: unit,
+        autofocus: true,
+        onSubmit: () => Navigator.pop(context, controller.text.trim()),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Log')),
+      ],
+    ),
+  );
+}
+
 /// Copy for deleting a key result — shared by the OKR tree and the Record
 /// page, which both offer the same action.
 const kDeleteKrTitle = 'Delete key result';

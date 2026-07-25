@@ -59,13 +59,19 @@ most-recently-logged-first capture list). Measurement writes go through
 `okr/log_value.dart` so the Record page and KR detail can't drift apart — the
 one exception is `DBHelper._insertCompletion`, below.
 
-`KrDetailScreen` **states the number and shows the history, and does not log** —
-the Record page is the only place a value is entered. Its history is one list
-with no view switch: `byPeriodDesc` (`okr/period.dart`) buckets entries into
-quarters, and each quarter heading carries the total and the grade the
-by-quarter view used to show. The sparkline plots `trendSeries`
+`KrDetailScreen` **states the number, shows the history, and records into it**.
+Its history is one list with no view switch: `byPeriodDesc` (`okr/period.dart`)
+buckets entries into quarters, and each quarter heading carries the total and the
+grade the by-quarter view used to show. The sparkline plots `trendSeries`
 (`okr/scoring.dart`), a running total for `SUM` and `COUNT` — a COUNT's raw
 values are all 1 and would draw a flat line.
+
+It carries the same "Record" FAB as the OKR tab, scoped to the one key result,
+and splits the same two ways the Record page's rows do: a `COUNT` is a one-tap
+`bumpKr`, anything else asks for a value through `promptLogValue` (`ui/kit.dart`)
+and writes it with `logKrValue`. The FAB is the only logging affordance here —
+the old inline form is gone — but both surfaces still go through
+`okr/log_value.dart`, which is what keeps them from drifting.
 
 A habit can **feed a COUNT key result**: ticking the habit also counts there.
 The link is offered on the habit side only — `habit_detail_sheet.dart` gains
