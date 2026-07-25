@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
@@ -22,11 +23,20 @@ class DBHelper {
     return _database!;
   }
 
+  /// The current schema version. Also the version tests open at.
+  static const int schemaVersion = 6;
+
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'habits_database.db');
-    return await openDatabase(
+    return _open(path);
+  }
+
+  /// The one place the schema, the migrations and the FK pragma are wired up,
+  /// so a database opened by a test behaves exactly like the one on device.
+  Future<Database> _open(String path) {
+    return openDatabase(
       path,
-      version: 5,
+      version: schemaVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -35,6 +45,14 @@ class DBHelper {
         await db.execute('PRAGMA foreign_keys = ON');
       },
     );
+  }
+
+  /// Points the singleton at [path] instead of the on-device file, running the
+  /// real `onCreate` / `onUpgrade` against it.
+  @visibleForTesting
+  Future<Database> openAt(String path) async {
+    await _database?.close();
+    return _database = await _open(path);
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -95,6 +113,13 @@ class DBHelper {
       await db
           .execute('ALTER TABLE key_results ADD COLUMN baseline_value REAL');
       await db.execute('ALTER TABLE key_results ADD COLUMN baseline_raw TEXT');
+    }
+
+    // Version 6: habit completions can feed a COUNT key result.
+    if (oldVersion >= 3 && oldVersion < 6) {
+      await db.execute('ALTER TABLE measurements ADD COLUMN '
+          'habit_completion_id TEXT REFERENCES habit_completions(id) '
+          'ON DELETE CASCADE');
     }
   }
 
@@ -201,9 +226,14 @@ class DBHelper {
         category TEXT,
         note TEXT,
         recorded_at TEXT NOT NULL,
+        -- Set when a habit completion produced this row. The cascade is what
+        -- makes un-ticking a habit take its count back off the key result.
+        habit_completion_id TEXT,
         FOREIGN KEY(execution_id) REFERENCES executions(id) ON DELETE CASCADE,
         FOREIGN KEY(key_result_id) REFERENCES key_results(id) ON DELETE CASCADE,
-        FOREIGN KEY(trackable_id) REFERENCES trackables(id) ON DELETE SET NULL
+        FOREIGN KEY(trackable_id) REFERENCES trackables(id) ON DELETE SET NULL,
+        FOREIGN KEY(habit_completion_id) REFERENCES habit_completions(id)
+          ON DELETE CASCADE
       )
     ''');
 
@@ -252,6 +282,7 @@ class DBHelper {
         await db.query('habits', orderBy: 'created_at DESC');
 
     final today = todayStart();
+    final links = await _linkedKeyResults();
 
     // Create a new list with mutable maps
     final List<Map<String, dynamic>> mutableHabits = [];
@@ -285,6 +316,8 @@ class DBHelper {
         'streak_at_risk': streaks['streak_at_risk'],
         'streak_start_date': streaks['streak_start_date'],
         'negative_streak': streaks['negative_streak'],
+        'linked_kr_id': links[habit['id']]?['id'],
+        'linked_kr_title': links[habit['id']]?['title'],
       });
     }
 
@@ -313,23 +346,52 @@ class DBHelper {
     );
 
     if (completion.isEmpty) {
-      // Mark as complete
-      await db.insert(
-        'habit_completions',
-        {
-          'id': uuid.v4(),
-          'habit_id': habitId,
-          'completed_at': DateTime.now().toIso8601String(),
-        },
-      );
+      await _insertCompletion(db, habitId, DateTime.now());
     } else {
-      // Remove completion
+      // Remove completion. Any count it fed a key result cascades with it.
       await db.delete(
         'habit_completions',
         where: 'habit_id = ? AND completed_at >= ?',
         whereArgs: [habitId, today.toIso8601String()],
       );
     }
+  }
+
+  /// Writes one completion for [habitId] at [at], mirroring it onto the COUNT
+  /// key result linked to the habit when there is one.
+  ///
+  /// Every path that completes a habit goes through here, so the mirror can't be
+  /// forgotten by one of them.
+  Future<void> _insertCompletion(
+      DatabaseExecutor db, String habitId, DateTime at) async {
+    final completionId = uuid.v4();
+    await db.insert('habit_completions', {
+      'id': completionId,
+      'habit_id': habitId,
+      'completed_at': at.toIso8601String(),
+    });
+
+    // A COUNT key result scores by counting rows, so one row per completion is
+    // the whole contribution — `value` is along for the ride. Written straight
+    // to key_result_id rather than through `logKrValue`, which would route a
+    // trackable-backed KR to trackable_id where `computeKr` can't see it.
+    final linked = await db.query(
+      'key_results',
+      columns: ['id', 'unit'],
+      where: "habit_id = ? AND aggregation = 'COUNT'",
+      whereArgs: [habitId],
+      limit: 1,
+    );
+    if (linked.isEmpty) return;
+
+    await db.insert('measurements', {
+      'id': uuid.v4(),
+      'key_result_id': linked.first['id'],
+      'value': 1,
+      'unit': linked.first['unit'],
+      'habit_completion_id': completionId,
+      'recorded_at': at.toIso8601String(),
+    });
   }
 
   Future<void> deleteHabit(String id) async {
@@ -420,15 +482,8 @@ class DBHelper {
     );
 
     if (completion.isEmpty) {
-      // Add retroactive completion
-      await db.insert(
-        'habit_completions',
-        {
-          'id': uuid.v4(),
-          'habit_id': habitId,
-          'completed_at': targetDate.toIso8601String(),
-        },
-      );
+      // Backdated, so the mirrored count lands in the quarter it belongs to.
+      await _insertCompletion(db, habitId, targetDate);
     }
   }
 
@@ -501,14 +556,7 @@ class DBHelper {
 
     if (!isCompleted && !isSkipped) {
       // State: Incomplete → Complete
-      await db.insert(
-        'habit_completions',
-        {
-          'id': uuid.v4(),
-          'habit_id': habitId,
-          'completed_at': DateTime.now().toIso8601String(),
-        },
-      );
+      await _insertCompletion(db, habitId, DateTime.now());
     } else if (isCompleted && !isSkipped) {
       // State: Complete → Skip
       // Remove completion
@@ -796,6 +844,11 @@ class DBHelper {
         'created_at': now,
       });
     }
+    // A habit link follows the objective into the new quarter rather than being
+    // held at both ends: the archived copy must let go of it, or which key
+    // result a completion feeds comes down to row order.
+    await db.update('key_results', {'habit_id': null},
+        where: 'objective_id = ?', whereArgs: [objectiveId]);
     return newId;
   }
 
@@ -908,6 +961,65 @@ class DBHelper {
   Future<void> deleteKeyResult(String id) async {
     final db = await database;
     await db.delete('key_results', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------- Habit links ----------
+  //
+  // A habit feeds at most one COUNT key result, and a key result is fed by at
+  // most one habit: the link is the `key_results.habit_id` column, so the
+  // one-to-one rule is where the column can be written, not a constraint.
+
+  /// habit id → the `{id, title}` of the COUNT key result it feeds. One grouped
+  /// query rather than one per habit, in the shape of [_lastLoggedAt].
+  Future<Map<String?, Map<String, dynamic>>> _linkedKeyResults() async {
+    final db = await database;
+    final rows = await db.query(
+      'key_results',
+      columns: ['id', 'title', 'habit_id'],
+      where: "habit_id IS NOT NULL AND aggregation = 'COUNT'",
+    );
+    return {
+      for (final r in rows)
+        r['habit_id'] as String: {'id': r['id'], 'title': r['title']},
+    };
+  }
+
+  /// The COUNT key results a habit can be linked to: those on an objective
+  /// still being worked. Carries `objective_title` for context and
+  /// `linked_habit_name` when another habit already holds the link.
+  ///
+  /// Deliberately skips [computeKr] — the picker needs identity, not a score.
+  Future<List<Map<String, dynamic>>> getLinkableKeyResults() async {
+    final db = await database;
+    return db.rawQuery('''
+      SELECT k.id, k.title, k.target_value, k.target_raw, k.unit,
+             o.title AS objective_title, h.name AS linked_habit_name,
+             k.habit_id
+      FROM key_results k
+      JOIN objectives o ON o.id = k.objective_id
+      LEFT JOIN habits h ON h.id = k.habit_id
+      WHERE k.aggregation = 'COUNT' AND o.status = 'active'
+      ORDER BY o.sort_order ASC, k.sort_order ASC, k.created_at ASC
+    ''');
+  }
+
+  /// Links [habitId] to [krId], breaking whatever link either end already had.
+  Future<void> linkHabitToKeyResult(String habitId, String krId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update('key_results', {'habit_id': null},
+          where: 'habit_id = ?', whereArgs: [habitId]);
+      await txn.update('key_results', {'habit_id': habitId},
+          where: 'id = ?', whereArgs: [krId]);
+    });
+  }
+
+  /// Drops [habitId]'s link. Counts it already contributed stay on the key
+  /// result — they record days that did happen.
+  Future<void> unlinkHabit(String habitId) async {
+    final db = await database;
+    await db.update('key_results', {'habit_id': null},
+        where: 'habit_id = ?', whereArgs: [habitId]);
   }
 
   /// A single key result merged with its live computed state.

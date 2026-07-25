@@ -6,6 +6,7 @@ import 'habit_detail_sheet.dart';
 import 'habit_dialogs.dart';
 import 'habit_history_dialog.dart';
 import 'habit_tile.dart';
+import 'link_kr_sheet.dart';
 import 'widget_sync.dart';
 
 /// The habits tab: today's list, plus the flows to add, edit and review one.
@@ -81,11 +82,27 @@ class _HabitsScreenState extends State<HabitsScreen>
       case HabitAction.toggleSkip:
         await DBHelper().toggleHabitSkip(habit['id']);
         await _refresh();
+      case HabitAction.link:
+        await _link(habit);
+      case HabitAction.unlink:
+        await DBHelper().unlinkHabit(habit['id']);
+        await _refresh();
       case HabitAction.history:
         await _showHistory(habit);
       case HabitAction.delete:
         await _delete(habit);
     }
+  }
+
+  /// Points the habit at a COUNT key result, so completing it also counts there.
+  Future<void> _link(Map<String, dynamic> habit) async {
+    // Loaded before the sheet opens, as the history dialog does.
+    final krs = await DBHelper().getLinkableKeyResults();
+    if (!mounted) return;
+    final krId = await showLinkKrSheet(context, krs, habitId: habit['id']);
+    if (krId == null) return;
+    await DBHelper().linkHabitToKeyResult(habit['id'], krId);
+    await _refresh();
   }
 
   Future<void> _rename(Map<String, dynamic> habit) async {

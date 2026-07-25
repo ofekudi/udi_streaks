@@ -6,7 +6,15 @@ import 'habit_tile.dart';
 
 /// What the user picked from a habit's detail sheet. The sheet itself performs
 /// no writes — the screen owns persistence and refreshing.
-enum HabitAction { rename, toggleComplete, toggleSkip, history, delete }
+enum HabitAction {
+  rename,
+  toggleComplete,
+  toggleSkip,
+  link,
+  unlink,
+  history,
+  delete
+}
 
 /// The bottom sheet shown when a habit row is tapped.
 ///
@@ -32,6 +40,7 @@ class _HabitDetailSheet extends StatelessWidget {
     final scheme = theme.colorScheme;
     final done = habit['completed_today'] == true;
     final skipped = habit['skipped_today'] == true;
+    final linkedKr = habit['linked_kr_title'] as String?;
 
     void choose(HabitAction action) => Navigator.pop(context, action);
 
@@ -96,6 +105,22 @@ class _HabitDetailSheet extends StatelessWidget {
                 color: skipped ? kUnskipColor : kSkippedColor,
                 label: skipped ? 'Unskip for Today' : 'Skip for Today',
                 onTap: () => choose(HabitAction.toggleSkip),
+              ),
+            // Completing this habit also counts toward the linked key result,
+            // so the link belongs beside the completion actions.
+            if (linkedKr == null)
+              _action(
+                icon: Icons.add_link,
+                color: scheme.primary,
+                label: 'Link to OKR',
+                onTap: () => choose(HabitAction.link),
+              )
+            else
+              _action(
+                icon: Icons.link_off,
+                color: scheme.primary,
+                label: 'Unlink from "$linkedKr"',
+                onTap: () => choose(HabitAction.unlink),
               ),
             _action(
               icon: Icons.history,

@@ -184,12 +184,11 @@ class _KrEditScreenState extends State<KrEditScreen> {
                 const SizedBox(width: kGapSm),
                 Expanded(
                   flex: 3,
+                  // Hint, no label: a floating label reserves a line above the
+                  // field and would sit this one lower than the target beside it.
                   child: TextField(
                     controller: _unit,
-                    decoration: const InputDecoration(
-                      labelText: 'Unit',
-                      hintText: 'reps, km…',
-                    ),
+                    decoration: const InputDecoration(hintText: 'reps, km…'),
                   ),
                 ),
               ],

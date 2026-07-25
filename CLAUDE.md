@@ -52,7 +52,16 @@ bar alone; `fmtScore` is only used by the quarter-close screen.
 Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
 `QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
 most-recently-logged-first capture list). Measurement writes go through
-`okr/log_value.dart` so the Record page and KR detail can't drift apart.
+`okr/log_value.dart` so the Record page and KR detail can't drift apart — the
+one exception is `DBHelper._insertCompletion`, below.
+
+A habit can **feed a COUNT key result**: ticking the habit also counts there.
+The link is offered on the habit side only — `habit_detail_sheet.dart` gains
+"Link to OKR" / "Unlink from …" and `habits/link_kr_sheet.dart` is the picker.
+The OKR tab shows no sign of it and needs none; a linked key result just
+receives measurements from a second source. Don't add an affordance for it
+there. Habits still import nothing from `okr/` — they reach the OKR tables
+through `DBHelper`, which sits below both.
 
 **Nothing computed is ever stored.** Streaks, KR scores, pace and rollups are
 folded from the log on every read. Those rules live in pure functions that take
@@ -75,7 +84,7 @@ and don't recompute a rule inline in a widget.
 
 ## Schema
 
-Version 5, ten tables. `areas → objectives → key_results` is intent;
+Version 6, ten tables. `areas → objectives → key_results` is intent;
 `executions → measurements` is doing; `reviews` holds quarterly grades.
 `executions` and `trackables` exist but have no CRUD yet — leave them.
 `key_results.target_raw`, `key_results.baseline_raw` and `measurements.note`
@@ -94,6 +103,22 @@ baseline. Offered on `LATEST` key results only: `SUM` and `COUNT` restart at
 zero each quarter by definition. `renewObjective` seeds the next quarter's
 baseline from the KR's last entry, so progressive goals need no rebuilding.
 New migrations go in `_onUpgrade` behind `if (oldVersion < N)`.
+
+`key_results.habit_id` is the habit → COUNT key result link, at most one habit
+per KR and one KR per habit. Every path that completes a habit goes through
+`DBHelper._insertCompletion`, which writes the completion *and* mirrors it as one
+measurement tagged `measurements.habit_completion_id`. That tag is the whole undo
+story: the FK cascades, so un-ticking a habit or deleting one takes its counts
+back off the key result with no code to run. Two consequences to preserve —
+mirror straight to `key_result_id` (`logKrValue` would route a trackable-backed
+KR somewhere `computeKr` can't see), and `renewObjective` clears `habit_id` on
+the archived copy so the link doesn't end up claimed at both ends.
+
+Because the migrations and these cascades are SQLite behaviour rather than pure
+rules, they are tested against a real database via `sqflite_common_ffi` and
+`DBHelper.openAt` — see `test/habit_okr_link_test.dart` and
+`test/habit_link_migration_test.dart`, which declares the previous schema
+verbatim because `_onCreate` always builds the current one.
 
 ## Keeping this file current
 

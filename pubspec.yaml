@@ -44,6 +44,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # Real SQLite on the host, so `flutter test` can exercise the migrations and
+  # the ON DELETE CASCADE rules the schema leans on.
+  sqflite_common_ffi: ^2.4.2
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
