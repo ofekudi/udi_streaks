@@ -65,13 +65,22 @@ class _HomeTrackersState extends State<HomeTrackers> {
   }
 
   Future<void> _logValue(Map<String, dynamic> k) async {
-    final v = parseValue(_entry.text);
-    if (v == null) return;
+    final raw = _entry.text.trim();
+    final v = parseValue(raw);
+    if (v == null) {
+      if (raw.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Enter a number — e.g. 30, 3x10 or 10,9,8')));
+      }
+      return;
+    }
     await DBHelper().logMeasurement(
       keyResultId: k['trackable_id'] == null ? k['id'] as String : null,
       trackableId: k['trackable_id'] as String?,
       value: v,
       unit: k['unit'] as String?,
+      // Keep the exact notation ("10,9,8", "3x10") so the history remembers it.
+      note: raw == fmtNum(v) ? null : raw,
     );
     _entry.clear();
     if (mounted) {
@@ -118,13 +127,14 @@ class _HomeTrackersState extends State<HomeTrackers> {
                 child: TextField(
                   controller: _entry,
                   autofocus: true,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: TextInputType.text,
+                  autocorrect: false,
+                  enableSuggestions: false,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _logValue(k),
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'e.g. 30 or 3x10',
+                    hintText: 'e.g. 30, 3x10, 10,9,8',
                     suffixText: k['unit'] ?? '',
                     border: const OutlineInputBorder(),
                   ),

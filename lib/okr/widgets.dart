@@ -250,10 +250,12 @@ class _InlineAddFieldState extends State<InlineAddField> {
   }
 }
 
-/// Parses a logged value. Accepts a plain number, or "sets × reps" shorthand:
-/// "3x10", "3*10", "3×10" → 30, and sums of terms like "3x10+2x8" → 46.
+/// Parses a logged value. Accepts a plain number, "sets × reps" shorthand
+/// ("3x10", "3*10", "3×10" → 30), and per-set lists that add up, written with
+/// "+" or "," ("8+7+6" or "10,9,8" → 21 / 27). Terms can be combined too.
 double? parseValue(String input) {
-  final s = input.trim().toLowerCase().replaceAll('×', 'x');
+  final s =
+      input.trim().toLowerCase().replaceAll('×', 'x').replaceAll(',', '+');
   if (s.isEmpty) return null;
   double sum = 0;
   for (final term in s.split('+')) {

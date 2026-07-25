@@ -20,6 +20,12 @@ void main() {
     expect(parseValue('10+5'), 15);
   });
 
+  test('per-set lists with commas', () {
+    expect(parseValue('8+7+6'), 21);
+    expect(parseValue('10,9,8'), 27);
+    expect(parseValue('3x7'), 21);
+  });
+
   test('rejects junk', () {
     expect(parseValue(''), isNull);
     expect(parseValue('abc'), isNull);

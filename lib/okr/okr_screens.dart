@@ -877,13 +877,22 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
   }
 
   Future<void> _log() async {
-    final v = parseValue(_logValue.text);
-    if (v == null) return;
+    final raw = _logValue.text.trim();
+    final v = parseValue(raw);
+    if (v == null) {
+      if (raw.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Enter a number — e.g. 30, 3x10 or 10,9,8')));
+      }
+      return;
+    }
     await DBHelper().logMeasurement(
       keyResultId: kr['trackable_id'] == null ? kr['id'] as String : null,
       trackableId: kr['trackable_id'] as String?,
       value: v,
       unit: kr['unit'] as String?,
+      // Keep the exact notation ("10,9,8", "3x10") so the history remembers it.
+      note: raw == fmtNum(v) ? null : raw,
     );
     _logValue.clear();
     FocusScope.of(context).unfocus();
@@ -924,13 +933,14 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                   Expanded(
                     child: TextField(
                       controller: _logValue,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType: TextInputType.text,
+                      autocorrect: false,
+                      enableSuggestions: false,
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => _log(),
                       decoration: InputDecoration(
                         isDense: true,
-                        hintText: 'e.g. 30 or 3x10',
+                        hintText: 'e.g. 30, 3x10, 10,9,8',
                         suffixText: unit,
                         border: const OutlineInputBorder(),
                       ),
