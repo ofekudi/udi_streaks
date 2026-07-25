@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../db_helper.dart';
 import 'okr_screens.dart';
-import 'widgets.dart';
+import '../ui/kit.dart';
 
 /// "Quick log" — a flat list of every key result you've defined, so you can
 /// log any of them without drilling into its objective. It is NOT a separate

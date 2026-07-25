@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:udi_streaks/okr/widgets.dart';
+import 'package:udi_streaks/ui/kit.dart';
 
 void main() {
   test('plain numbers', () {

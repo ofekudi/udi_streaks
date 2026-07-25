@@ -3,7 +3,7 @@ import '../db_helper.dart';
 import 'home_trackers.dart';
 import 'period.dart';
 import 'rollup.dart';
-import 'widgets.dart';
+import '../ui/kit.dart';
 
 /// A simple centered rename dialog (keyboard re-centers it above the field).
 Future<String?> promptText(BuildContext context,
