@@ -555,6 +555,7 @@ class _KrEditScreenState extends State<KrEditScreen> {
   late final TextEditingController _unit;
   late String _agg;
   late String _direction;
+  String? _targetError;
 
   @override
   void initState() {
@@ -656,11 +657,23 @@ class _KrEditScreenState extends State<KrEditScreen> {
               const SizedBox(width: kGapSm),
               Expanded(
                 flex: 3,
+                // Plain text, not a number pad: [parseValue] also takes
+                // "3x10" and "10,9,8", which a numeric keypad can't type.
                 child: TextField(
                   controller: _target,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Target'),
+                  keyboardType: TextInputType.text,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  onChanged: (_) {
+                    if (_targetError != null) {
+                      setState(() => _targetError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Target',
+                    hintText: 'e.g. 30, 3x10',
+                    errorText: _targetError,
+                  ),
                 ),
               ),
               if (_agg != 'COUNT') ...[
@@ -692,7 +705,14 @@ class _KrEditScreenState extends State<KrEditScreen> {
     final db = DBHelper();
     final k = widget.kr;
     final unit = _unit.text.trim().isEmpty ? null : _unit.text.trim();
-    final target = double.tryParse(_target.text.trim());
+    // An empty target is deliberate ("just track the trend"); junk isn't —
+    // flag it rather than letting it silently clear an existing target.
+    final rawTarget = _target.text.trim();
+    final target = parseValue(rawTarget);
+    if (rawTarget.isNotEmpty && target == null) {
+      setState(() => _targetError = 'Enter a number — e.g. 30, 3x10 or 10,9,8');
+      return;
+    }
     // Window is inferred, not asked: a "Latest" level always shows the newest
     // value (all-time); Count/Total goals accumulate within the objective.
     final window = _agg == 'LATEST' ? 'ALL' : 'OBJECTIVE';
