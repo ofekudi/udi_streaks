@@ -5,7 +5,8 @@ import '../ui/kit.dart';
 
 /// A single-field name dialog, used for renaming a habit.
 ///
-/// Returns the trimmed name, or null if dismissed. Replaces a hand-rolled
+/// Returns the name as typed — deliberately not trimmed, matching the
+/// original — or null if dismissed. Replaces a hand-rolled
 /// `TextEditingController` + `AlertDialog` block in `main.dart`.
 Future<String?> promptHabitName(
   BuildContext context, {
