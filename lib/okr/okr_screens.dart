@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import '../db_helper.dart';
 import 'home_trackers.dart';
 import 'period.dart';
@@ -54,14 +53,14 @@ class _GoalsTabState extends State<GoalsTab> {
 
   Widget _areaEmojiButton() {
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(kGapMd),
       onTap: _pickAreaEmoji,
       child: Container(
-        width: 48,
-        height: 48,
+        width: kTapTarget,
+        height: kTapTarget,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(kGapMd),
           border:
               Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         ),
@@ -70,19 +69,10 @@ class _GoalsTabState extends State<GoalsTab> {
     );
   }
 
-  void _pickAreaEmoji() {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => SizedBox(
-        height: 320,
-        child: EmojiPicker(
-          onEmojiSelected: (category, emoji) {
-            setState(() => _newAreaEmoji = emoji.emoji);
-            Navigator.pop(context);
-          },
-        ),
-      ),
-    );
+  Future<void> _pickAreaEmoji() async {
+    final emoji = await pickEmoji(context);
+    if (emoji == null || !mounted) return;
+    setState(() => _newAreaEmoji = emoji);
   }
 
   Future<void> _load() async {
@@ -106,17 +96,12 @@ class _GoalsTabState extends State<GoalsTab> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(12),
+              padding: kListPadding,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
-                  child: Text('Areas & objectives',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                ),
+                const SectionHeader('Areas & objectives'),
                 for (final a in _areas) _areaCard(context, a),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: kGapXs),
                   child: InlineAddField(
                     label: 'Add area',
                     hint: 'Training, Books, Body…',
@@ -128,9 +113,9 @@ class _GoalsTabState extends State<GoalsTab> {
                     },
                   ),
                 ),
-                const Divider(height: 36),
+                const Divider(height: kGapXl + kGapSm),
                 const HomeTrackers(),
-                const SizedBox(height: 24),
+                const SizedBox(height: kGapXl),
               ],
             ),
     );
@@ -138,30 +123,33 @@ class _GoalsTabState extends State<GoalsTab> {
 
   Widget _areaCard(BuildContext context, Map<String, dynamic> a) {
     final score = a['score'] as double?;
+    final theme = Theme.of(context);
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: kGapSm),
       child: ListTile(
         leading: Text(a['icon'] ?? '🎯', style: const TextStyle(fontSize: 26)),
         title: Text(a['name'],
-            style: const TextStyle(fontWeight: FontWeight.w700)),
+            style:
+                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.only(top: kGapSm),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (score != null) ...[
                 ScoreBar(score),
-                const SizedBox(height: 4),
+                const SizedBox(height: kGapXs),
               ],
               Text('${a['objective_count']} objectives',
-                  style: const TextStyle(fontSize: 11)),
+                  style: theme.textTheme.labelSmall),
             ],
           ),
         ),
         trailing: score == null
             ? const Icon(Icons.chevron_right)
             : Text(fmtScore(score),
-                style: const TextStyle(fontWeight: FontWeight.w800)),
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w800)),
         onLongPress: () => _areaMenu(a),
         onTap: () async {
           await Navigator.push(context,
@@ -190,20 +178,11 @@ class _GoalsTabState extends State<GoalsTab> {
     ]);
   }
 
-  void _changeAreaEmoji(Map<String, dynamic> a) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => SizedBox(
-        height: 320,
-        child: EmojiPicker(
-          onEmojiSelected: (category, emoji) async {
-            Navigator.pop(context);
-            await DBHelper().updateArea(a['id'], icon: emoji.emoji);
-            _load();
-          },
-        ),
-      ),
-    );
+  Future<void> _changeAreaEmoji(Map<String, dynamic> a) async {
+    final emoji = await pickEmoji(context);
+    if (emoji == null) return;
+    await DBHelper().updateArea(a['id'], icon: emoji);
+    _load();
   }
 
   Future<void> _renameArea(Map<String, dynamic> a) async {
@@ -215,28 +194,14 @@ class _GoalsTabState extends State<GoalsTab> {
     }
   }
 
-  void _confirmDelete(Map<String, dynamic> a) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete area'),
-        content: Text(
-            'Delete "${a['name']}" and its objectives? Logged measurements are kept.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              await DBHelper().deleteArea(a['id']);
-              if (context.mounted) Navigator.pop(context);
-              _load();
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDelete(Map<String, dynamic> a) async {
+    final ok = await confirmDelete(context,
+        title: 'Delete area',
+        message:
+            'Delete "${a['name']}" and its objectives? Logged measurements are kept.');
+    if (!ok) return;
+    await DBHelper().deleteArea(a['id']);
+    _load();
   }
 }
 
@@ -281,11 +246,11 @@ class _AreaScreenState extends State<AreaScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(12),
+              padding: kListPadding,
               children: [
                 for (final o in _objectives) _objectiveCard(o),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: kGapXs),
                   child: InlineAddField(
                     label: 'Add objective',
                     hint: 'Get stronger, Read more…',
@@ -309,33 +274,35 @@ class _AreaScreenState extends State<AreaScreen> {
     final score = o['score'] as double?;
     final archived = o['status'] == 'archived';
     final krCount = (o['key_results'] as List).length;
+    final theme = Theme.of(context);
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: kGapSm),
       child: ListTile(
         title: Row(children: [
           Expanded(
               child: Text(o['title'],
-                  style: const TextStyle(fontWeight: FontWeight.w700))),
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700))),
           if (archived)
-            const Text('archived',
-                style: TextStyle(fontSize: 10, color: Colors.grey)),
+            Text('archived',
+                style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey)),
         ]),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.only(top: kGapSm),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (score != null) ScoreBar(score),
-              const SizedBox(height: 4),
-              Text('$krCount key results',
-                  style: const TextStyle(fontSize: 11)),
+              const SizedBox(height: kGapXs),
+              Text('$krCount key results', style: theme.textTheme.labelSmall),
             ],
           ),
         ),
         trailing: score == null
             ? null
             : Text(fmtScore(score),
-                style: const TextStyle(fontWeight: FontWeight.w800)),
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w800)),
         onLongPress: () => _objectiveMenu(o),
         onTap: () async {
           await Navigator.push(
@@ -372,28 +339,14 @@ class _AreaScreenState extends State<AreaScreen> {
     }
   }
 
-  void _confirmDeleteObjective(Map<String, dynamic> o) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete objective'),
-        content: Text(
-            'Delete "${o['title']}" and its key results? Logged measurements are kept.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              await DBHelper().deleteObjective(o['id']);
-              if (context.mounted) Navigator.pop(context);
-              _load();
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDeleteObjective(Map<String, dynamic> o) async {
+    final ok = await confirmDelete(context,
+        title: 'Delete objective',
+        message:
+            'Delete "${o['title']}" and its key results? Logged measurements are kept.');
+    if (!ok) return;
+    await DBHelper().deleteObjective(o['id']);
+    _load();
   }
 }
 
@@ -463,25 +416,27 @@ class _ObjectiveScreenState extends State<ObjectiveScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(12),
+              padding: kListPadding,
               children: [
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: kFormPadding,
                     child: Column(children: [
                       Text(fmtScore(_score),
-                          style: const TextStyle(
-                              fontSize: 30, fontWeight: FontWeight.w800)),
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(fontWeight: FontWeight.w800)),
                       Text(
                           '${fmtDate(DateTime.parse(widget.objective['start_date']))} → ${fmtDate(DateTime.parse(widget.objective['end_date']))}',
-                          style: const TextStyle(fontSize: 12)),
+                          style: Theme.of(context).textTheme.bodySmall),
                     ]),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: kGapSm),
                 for (final k in _krs) _krTile(k),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: kGapXs),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: OutlinedButton.icon(
@@ -489,10 +444,7 @@ class _ObjectiveScreenState extends State<ObjectiveScreen> {
                         final created = await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => KrEditScreen(
-                              objectiveId: objId,
-                              areaId: widget.area['id'],
-                            ),
+                            builder: (_) => KrEditScreen(objectiveId: objId),
                           ),
                         );
                         if (created == true) _load();
@@ -509,40 +461,32 @@ class _ObjectiveScreenState extends State<ObjectiveScreen> {
 
   Widget _krTile(Map<String, dynamic> k) {
     final score = k['score'] as double?;
-    final agg = k['aggregation'];
     final cur = k['current'];
     final target = k['target'];
     final unit = k['unit'] ?? '';
     final down = k['direction'] == 'DOWN';
-    String valueLine;
-    if (agg == 'CADENCE' || agg == 'RECENCY') {
-      final ds = k['days_since'];
-      valueLine = ds == null ? 'never' : '$ds days ago';
-    } else if (target != null) {
-      valueLine = '${fmtNum(cur)} / ${fmtNum(target)} $unit';
-    } else {
-      valueLine = '${fmtNum(cur)} $unit · no target';
-    }
+    final theme = Theme.of(context);
+    final valueLine = target != null
+        ? '${fmtNum(cur)} / ${fmtNum(target)} $unit'
+        : '${fmtNum(cur)} $unit · no target';
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: kGapSm),
       child: ListTile(
         title: Text(k['title'],
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            style:
+                theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
+          padding: const EdgeInsets.only(top: kGapXs),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Text(valueLine, style: const TextStyle(fontSize: 12)),
+                Text(valueLine, style: theme.textTheme.bodySmall),
                 const Spacer(),
-                if (k['overdue'] == true)
-                  const PacePill('behind')
-                else
-                  PacePill(k['on_pace']),
+                PacePill(k['on_pace']),
               ]),
               if (score != null) ...[
-                const SizedBox(height: 5),
+                const SizedBox(height: kGapXs),
                 ScoreBar(score, down: down),
               ],
             ],
@@ -552,11 +496,7 @@ class _ObjectiveScreenState extends State<ObjectiveScreen> {
         onTap: () async {
           await Navigator.push(
               context,
-              MaterialPageRoute(
-                  builder: (_) => KrDetailScreen(
-                        kr: k,
-                        areaId: widget.area['id'],
-                      )));
+              MaterialPageRoute(builder: (_) => KrDetailScreen(kr: k)));
           _load();
         },
       ),
@@ -578,34 +518,18 @@ class _ObjectiveScreenState extends State<ObjectiveScreen> {
   Future<void> _editKr(Map<String, dynamic> k) async {
     final changed = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-          builder: (_) => KrEditScreen(kr: k, areaId: widget.area['id'])),
+      MaterialPageRoute(builder: (_) => KrEditScreen(kr: k)),
     );
     if (changed == true) _load();
   }
 
-  void _confirmDeleteKr(Map<String, dynamic> k) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete key result'),
-        content: Text(
-            'Delete "${k['title']}"? Its logged measurements are removed.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              await DBHelper().deleteKeyResult(k['id']);
-              if (context.mounted) Navigator.pop(context);
-              _load();
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDeleteKr(Map<String, dynamic> k) async {
+    if (!await confirmDelete(context,
+        title: kDeleteKrTitle, message: deleteKrMessage(k['title']))) {
+      return;
+    }
+    await DBHelper().deleteKeyResult(k['id']);
+    _load();
   }
 
   void _closeQuarter() {
@@ -628,8 +552,7 @@ class _ObjectiveScreenState extends State<ObjectiveScreen> {
 class KrEditScreen extends StatefulWidget {
   final Map<String, dynamic>? kr; // null = create a new key result
   final String? objectiveId;
-  final String? areaId;
-  const KrEditScreen({super.key, this.kr, this.objectiveId, this.areaId});
+  const KrEditScreen({super.key, this.kr, this.objectiveId});
   @override
   State<KrEditScreen> createState() => _KrEditScreenState();
 }
@@ -672,13 +595,13 @@ class _KrEditScreenState extends State<KrEditScreen> {
       message: up ? 'Higher is better' : 'Lower is better',
       child: Material(
         color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kGapMd),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(kGapMd),
           onTap: () => setState(() => _direction = up ? 'DOWN' : 'UP'),
           child: SizedBox(
-            width: 52,
-            height: 52,
+            width: kTapTarget,
+            height: kTapTarget,
             child: Center(
               child: Icon(
                 up
@@ -707,15 +630,14 @@ class _KrEditScreenState extends State<KrEditScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: kFormPadding,
         children: [
           TextField(
             controller: _title,
             decoration: const InputDecoration(labelText: 'Title'),
           ),
-          const SizedBox(height: 20),
-          const Text('How do you want to measure it?',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          const SizedBox(height: kGapXl),
+          const SectionHeader('How do you want to measure it?'),
           for (final a in kAggregations)
             RadioListTile<String>(
               value: a.value,
@@ -723,20 +645,23 @@ class _KrEditScreenState extends State<KrEditScreen> {
               contentPadding: EdgeInsets.zero,
               dense: true,
               title: Text(a.label,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
               subtitle:
-                  Text(a.explainer, style: const TextStyle(fontSize: 12)),
+                  Text(a.explainer, style: Theme.of(context).textTheme.bodySmall),
               onChanged: (v) => setState(() => _agg = v!),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: kGapMd),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: kGapXs),
                 child: _directionToggle(),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: kGapSm),
               Expanded(
                 flex: 3,
                 child: TextField(
@@ -747,7 +672,7 @@ class _KrEditScreenState extends State<KrEditScreen> {
                 ),
               ),
               if (_agg != 'COUNT') ...[
-                const SizedBox(width: 10),
+                const SizedBox(width: kGapSm),
                 Expanded(
                   flex: 3,
                   child: TextField(
@@ -758,13 +683,12 @@ class _KrEditScreenState extends State<KrEditScreen> {
               ],
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: kGapSm),
           Text(
               'Leave the target empty to just track it over time — no goal, just the trend.',
-              style: TextStyle(
-                  fontSize: 12,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 24),
+          const SizedBox(height: kGapXl),
         ],
       ),
     );
@@ -813,10 +737,8 @@ class _KrEditScreenState extends State<KrEditScreen> {
 
 class KrDetailScreen extends StatefulWidget {
   final Map<String, dynamic> kr;
-  final String? areaId;
   final bool editable;
-  const KrDetailScreen(
-      {super.key, required this.kr, this.areaId, this.editable = true});
+  const KrDetailScreen({super.key, required this.kr, this.editable = true});
   @override
   State<KrDetailScreen> createState() => _KrDetailScreenState();
 }
@@ -895,7 +817,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
       note: raw == fmtNum(v) ? null : raw,
     );
     _logValue.clear();
-    FocusScope.of(context).unfocus();
+    if (mounted) FocusScope.of(context).unfocus();
     await _load();
   }
 
@@ -914,9 +836,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
               onPressed: () async {
                 final changed = await Navigator.push<bool>(
                   context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          KrEditScreen(kr: kr, areaId: widget.areaId)),
+                  MaterialPageRoute(builder: (_) => KrEditScreen(kr: kr)),
                 );
                 if (changed == true) _load();
               },
@@ -926,52 +846,45 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: kFormPadding,
               children: [
                 // Inline logger — no modal, no keyboard cover.
                 Row(children: [
                   Expanded(
-                    child: TextField(
+                    child: LogValueField(
                       controller: _logValue,
-                      keyboardType: TextInputType.text,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _log(),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: 'e.g. 30, 3x10, 10,9,8',
-                        suffixText: unit,
-                        border: const OutlineInputBorder(),
-                      ),
+                      unit: kr['unit'] as String?,
+                      onSubmit: _log,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: kGapSm),
                   FilledButton(onPressed: _log, child: const Text('Add')),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: kGapLg),
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: kFormPadding,
                     child: Column(children: [
                       Text('${fmtNum(kr['current'])} $unit',
-                          style: const TextStyle(
-                              fontSize: 26, fontWeight: FontWeight.w800)),
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w800)),
                       if (kr['target'] != null)
                         Text('target ${fmtNum(kr['target'])} $unit',
-                            style: const TextStyle(fontSize: 12)),
+                            style: Theme.of(context).textTheme.bodySmall),
                     ]),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: kGapMd),
                 if (points.isNotEmpty)
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: kListPadding,
                       child: Sparkline(points, height: 80),
                     ),
                   ),
-                const SizedBox(height: 12),
+                const SizedBox(height: kGapMd),
                 SegmentedButton<bool>(
                   segments: const [
                     ButtonSegment(value: true, label: Text('By quarter')),
@@ -981,7 +894,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                   onSelectionChanged: (s) =>
                       setState(() => _byQuarter = s.first),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: kGapSm),
                 if (_byQuarter)
                   for (final p in _periods)
                     ListTile(
@@ -1003,7 +916,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                 if ((_byQuarter && _periods.isEmpty) ||
                     (!_byQuarter && _series.isEmpty))
                   const Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: EdgeInsets.all(kGapXl),
                     child: Center(child: Text('No entries yet.')),
                   ),
               ],
@@ -1041,7 +954,7 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
     return Scaffold(
       appBar: AppBar(title: Text('Close $_period')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: kFormPadding,
         children: [
           Text('Grade each key result 1–10 (your own view).',
               style: TextStyle(
@@ -1049,17 +962,17 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
                       .colorScheme
                       .onSurface
                       .withValues(alpha: 0.7))),
-          const SizedBox(height: 12),
+          const SizedBox(height: kGapMd),
           for (final k in widget.krs) _gradeRow(k),
-          const SizedBox(height: 8),
-          const Text('Grades save to history · reflection stays in your pen ✍️',
-              style: TextStyle(fontSize: 12)),
-          const SizedBox(height: 20),
+          const SizedBox(height: kGapSm),
+          Text('Grades save to history · reflection stays in your pen ✍️',
+              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: kGapXl),
           FilledButton(
             onPressed: _saveAndRenew,
             child: const Text('Save grades & renew for next quarter'),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: kGapSm),
           OutlinedButton(
             onPressed: _saveAndArchive,
             child: const Text('Save grades & archive'),
@@ -1072,21 +985,23 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
   Widget _gradeRow(Map<String, dynamic> k) {
     final id = k['id'] as String;
     final g = _grades[id] ?? 0;
+    final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: kListPadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
               Expanded(
                   child: Text(k['title'],
-                      style: const TextStyle(fontWeight: FontWeight.w700))),
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700))),
               Text('score ${fmtScore(k['score'] as double?)}',
-                  style: const TextStyle(fontSize: 12)),
+                  style: theme.textTheme.bodySmall),
             ]),
             Row(children: [
-              const Text('grade', style: TextStyle(fontSize: 11)),
+              Text('grade', style: theme.textTheme.labelSmall),
               Expanded(
                 child: Slider(
                   value: g.toDouble(),
@@ -1098,10 +1013,11 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
                 ),
               ),
               SizedBox(
-                width: 24,
+                width: kGapXl,
                 child: Text('$g',
                     textAlign: TextAlign.end,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800)),
               ),
             ]),
           ],
@@ -1178,7 +1094,7 @@ class _HistoryTabState extends State<HistoryTab> {
           : _krs.isEmpty
               ? const Center(
                   child: Padding(
-                  padding: EdgeInsets.all(32),
+                  padding: EdgeInsets.all(kGapXl),
                   child: Text(
                       'Nothing to show yet.\nAdd key results, then tap one to see it over time.',
                       textAlign: TextAlign.center),
@@ -1186,10 +1102,11 @@ class _HistoryTabState extends State<HistoryTab> {
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
-                    padding: const EdgeInsets.all(12),
+                    padding: kListPadding,
                     children: [
                       for (final k in _krs)
                         Card(
+                          margin: const EdgeInsets.only(bottom: kGapSm),
                           child: ListTile(
                             title: Text(k['title']),
                             subtitle: Text(

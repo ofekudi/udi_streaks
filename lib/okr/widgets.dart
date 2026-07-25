@@ -1,4 +1,18 @@
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
+
+// Spacing scale — every gap in the OKR module snaps to one of these.
+const double kGapXs = 4, kGapSm = 8, kGapMd = 12, kGapLg = 16, kGapXl = 24;
+
+/// Page padding for a list of cards.
+const kListPadding = EdgeInsets.all(kGapMd);
+
+/// Page padding for a form or detail page.
+const kFormPadding = EdgeInsets.all(kGapLg);
+
+/// Minimum square tap target (Material's 48dp), used by the small square
+/// buttons that sit next to a text field.
+const double kTapTarget = 48;
 
 /// A consistent, roomy bottom sheet: full width, rounded top, a drag handle,
 /// a title with a close button, and a scrolling body that grows with content
@@ -143,8 +157,82 @@ Future<void> showActionSheet(
                 a.onTap();
               },
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: kGapSm),
         ],
+      ),
+    ),
+  );
+}
+
+/// A small caps-ish heading above a group, with an optional explainer under it.
+class SectionHeader extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  const SectionHeader(this.title, {super.key, this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kGapXs, kGapXs, kGapXs, kGapSm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          if (subtitle != null)
+            Text(subtitle!,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The standard destructive confirmation. Returns true only if the user
+/// confirmed; dismissing it counts as "no".
+Future<bool> confirmDelete(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
+
+/// Copy for deleting a key result — shared by the objective screen and Quick
+/// log, which both offer the same action.
+const kDeleteKrTitle = 'Delete key result';
+String deleteKrMessage(String title) =>
+    'Delete "$title"? Its logged measurements are removed.';
+
+/// The emoji picker as a bottom sheet. Returns the chosen emoji, or null if
+/// the sheet was dismissed.
+Future<String?> pickEmoji(BuildContext context) {
+  return showModalBottomSheet<String>(
+    context: context,
+    builder: (_) => SizedBox(
+      height: 320,
+      child: EmojiPicker(
+        onEmojiSelected: (category, emoji) =>
+            Navigator.pop(context, emoji.emoji),
       ),
     ),
   );
@@ -213,10 +301,13 @@ class _InlineAddFieldState extends State<InlineAddField> {
       );
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: kGapSm),
       child: Row(
         children: [
-          if (widget.leading != null) ...[widget.leading!, const SizedBox(width: 8)],
+          if (widget.leading != null) ...[
+            widget.leading!,
+            const SizedBox(width: kGapSm)
+          ],
           Expanded(
             child: TextField(
               controller: _controller,
@@ -245,6 +336,42 @@ class _InlineAddFieldState extends State<InlineAddField> {
             icon: const Icon(Icons.close),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The value-entry field, used everywhere a measurement is logged. Plain text
+/// rather than a number pad, because [parseValue] also accepts "3x10" and
+/// "10,9,8" — a numeric keypad can't type those.
+class LogValueField extends StatelessWidget {
+  final TextEditingController controller;
+  final String? unit;
+  final VoidCallback onSubmit;
+  final bool autofocus;
+  const LogValueField({
+    super.key,
+    required this.controller,
+    required this.onSubmit,
+    this.unit,
+    this.autofocus = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      autofocus: autofocus,
+      keyboardType: TextInputType.text,
+      autocorrect: false,
+      enableSuggestions: false,
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => onSubmit(),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'e.g. 30, 3x10, 10,9,8',
+        suffixText: unit ?? '',
+        border: const OutlineInputBorder(),
       ),
     );
   }
@@ -308,17 +435,14 @@ class PacePill extends StatelessWidget {
         label = 'on track';
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: kGapSm, vertical: 3),
       decoration: BoxDecoration(
-        color: fg.withOpacity(0.12),
+        color: fg.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label,
-          style: TextStyle(
-              color: fg,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3)),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: fg, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
     );
   }
 }
@@ -401,7 +525,7 @@ class _SparkPainter extends CustomPainter {
         fill,
         Paint()
           ..style = PaintingStyle.fill
-          ..color = color.withOpacity(0.10));
+          ..color = color.withValues(alpha: 0.10));
     canvas.drawPath(
         path,
         Paint()
@@ -449,7 +573,7 @@ class GradeBar extends StatelessWidget {
 
 /// Aggregation modes shown to the user in plain language with an example.
 class AggregationOption {
-  final String value; // SUM | COUNT | LATEST | MAX | CADENCE
+  final String value; // SUM | COUNT | LATEST
   final String label;
   final String explainer;
   const AggregationOption(this.value, this.label, this.explainer);

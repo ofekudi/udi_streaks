@@ -43,12 +43,7 @@ class _HomeTrackersState extends State<HomeTrackers> {
   bool _isCount(Map<String, dynamic> k) => k['aggregation'] == 'COUNT';
 
   String _valueLine(Map<String, dynamic> k) {
-    final agg = k['aggregation'];
     final unit = k['unit'] ?? '';
-    if (agg == 'CADENCE' || agg == 'RECENCY') {
-      final ds = k['days_since'];
-      return ds == null ? 'never logged' : '$ds days ago';
-    }
     if (k['target'] != null) {
       return '${fmtNum(k['current'])} / ${fmtNum(k['target'])} $unit';
     }
@@ -98,9 +93,12 @@ class _HomeTrackersState extends State<HomeTrackers> {
       children: [
         ListTile(
           dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          contentPadding: const EdgeInsets.symmetric(horizontal: kGapXs),
           title: Text(k['title'],
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
           subtitle: Text(_valueLine(k)),
           trailing: _isCount(k)
               ? IconButton.filledTonal(
@@ -121,26 +119,17 @@ class _HomeTrackersState extends State<HomeTrackers> {
         ),
         if (open)
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 8, 10),
+            padding: const EdgeInsets.fromLTRB(kGapXs, 0, kGapSm, kGapSm),
             child: Row(children: [
               Expanded(
-                child: TextField(
+                child: LogValueField(
                   controller: _entry,
                   autofocus: true,
-                  keyboardType: TextInputType.text,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _logValue(k),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: 'e.g. 30, 3x10, 10,9,8',
-                    suffixText: k['unit'] ?? '',
-                    border: const OutlineInputBorder(),
-                  ),
+                  unit: k['unit'] as String?,
+                  onSubmit: () => _logValue(k),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: kGapSm),
               FilledButton(
                   onPressed: () => _logValue(k), child: const Text('Log')),
             ]),
@@ -178,28 +167,13 @@ class _HomeTrackersState extends State<HomeTrackers> {
     ]);
   }
 
-  void _confirmDelete(Map<String, dynamic> k) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete key result'),
-        content: Text(
-            'Delete "${k['title']}"? Its logged measurements are removed.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              await DBHelper().deleteKeyResult(k['id']);
-              if (context.mounted) Navigator.pop(context);
-              _load();
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDelete(Map<String, dynamic> k) async {
+    if (!await confirmDelete(context,
+        title: kDeleteKrTitle, message: deleteKrMessage(k['title']))) {
+      return;
+    }
+    await DBHelper().deleteKeyResult(k['id']);
+    _load();
   }
 
   @override
@@ -207,27 +181,16 @@ class _HomeTrackersState extends State<HomeTrackers> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 4, 4, 0),
-          child: Text('Quick log',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-          child: Text(
-            'Log any of your key results in one tap — no need to open its objective. Counts get a +1; others open to enter a value.',
-            style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-        ),
+        const SectionHeader('Quick log',
+            subtitle:
+                'Log any of your key results in one tap — no need to open its objective. Counts get a +1; others open to enter a value.'),
         if (_loaded && _krs.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: kGapXs, vertical: kGapSm),
             child: Text(
               'No key results yet. Add an area and objective above, then add key results to log here.',
-              style: TextStyle(
-                  fontSize: 12.5,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ),

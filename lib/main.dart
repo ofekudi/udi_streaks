@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'db_helper.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
-import 'package:flutter/foundation.dart' as foundation;
 import 'package:home_widget/home_widget.dart';
 import 'okr/okr_screens.dart';
+import 'okr/widgets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -174,21 +173,9 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
               content: Row(
                 children: [
                   GestureDetector(
-                    onTap: () {
-                      showModalBottomSheet(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return SizedBox(
-                            height: 350,
-                            child: EmojiPicker(
-                              onEmojiSelected: (category, emoji) {
-                                setState(() => selectedEmoji = emoji.emoji);
-                                Navigator.pop(context);
-                              },
-                            ),
-                          );
-                        },
-                      );
+                    onTap: () async {
+                      final emoji = await pickEmoji(context);
+                      if (emoji != null) setState(() => selectedEmoji = emoji);
                     },
                     child: Container(
                       padding: const EdgeInsets.all(8),

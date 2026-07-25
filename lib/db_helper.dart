@@ -1044,7 +1044,7 @@ class DBHelper {
 
   /// Folds the log into a KR's current value + auto-score. Nothing is stored.
   /// Returns: current, target, score (null when no target / track-only),
-  /// on_pace, overdue, days_since, last_at.
+  /// unit, on_pace, aggregation, direction.
   Future<Map<String, dynamic>> computeKr(
     Map<String, dynamic> kr, {
     Map<String, dynamic>? objective,
