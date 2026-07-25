@@ -28,7 +28,8 @@ Future<bool> logKrValue(Map<String, dynamic> kr, String raw) async {
 /// The target as the user wrote it — `3x12` when the notation was kept, else the
 /// parsed number. Display only; scoring runs on `target_value`.
 String targetLabel(Map<String, dynamic> kr) =>
-    (kr['target_raw'] as String?) ?? fmtNum(kr['target'] as num?);
+    (kr['target_raw'] as String?) ??
+    fmtNum((kr['target'] ?? kr['target_value']) as num?);
 
 /// Where the key result stands, as the user wrote it: the newest entry's
 /// notation (`3x11`), else its number. With nothing logged it reads as the
@@ -57,6 +58,11 @@ bool krWantsDown(Map<String, dynamic> kr) => wantsDown(
       target: (kr['target'] as num?)?.toDouble(),
       direction: (kr['direction'] ?? 'UP') as String,
     );
+
+/// One logged entry as the user wrote it — `3x11` when we kept the notation,
+/// else the number. Takes a `measurements` row, not a key result.
+String entryLabel(Map<String, dynamic> measurement) =>
+    (measurement['note'] as String?) ?? fmtNum(measurement['value'] as num?);
 
 /// How much the newest entry moved from the one before it, or null when there's
 /// nothing to compare against — see [previousValue].

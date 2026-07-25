@@ -66,6 +66,31 @@ double? aggregateValues(List<double> valuesNewestFirst, String aggregation) {
   }
 }
 
+/// The series to plot for a key result, oldest first — the order a chart reads
+/// left to right.
+///
+/// `SUM` and `COUNT` are running totals, because a single entry means nothing on
+/// its own there: plotting the raw values of a COUNT draws a flat line at 1,
+/// while the total is the thing that climbs toward the target. `LATEST` is
+/// already a level, so its entries plot as they are.
+///
+/// Mirrors [aggregateValues], so the last point of a full-window series is that
+/// window's current value.
+List<double> trendSeries(List<double> valuesOldestFirst, String aggregation) {
+  switch (aggregation) {
+    case 'COUNT':
+      // The value is not part of a COUNT — only that an entry exists.
+      return [
+        for (var i = 0; i < valuesOldestFirst.length; i++) (i + 1).toDouble(),
+      ];
+    case 'LATEST':
+      return valuesOldestFirst;
+    default: // SUM
+      var total = 0.0;
+      return [for (final v in valuesOldestFirst) total += v];
+  }
+}
+
 /// The value of the entry before the newest one, or null when there isn't one.
 ///
 /// Only defined for `LATEST`: the previous entry is a previous *state* there,

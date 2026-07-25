@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
+import 'kr_row.dart';
 import 'log_value.dart';
 import 'okr_screens.dart';
 import 'period.dart';
@@ -422,7 +423,7 @@ class _GoalsTabState extends State<GoalsTab> {
                 ),
               ),
               const SizedBox(width: kGapSm),
-              _valueCell(k),
+              KrValueCell(k),
             ],
           ),
         ),
@@ -572,41 +573,10 @@ class _GoalsTabState extends State<GoalsTab> {
                 ),
               ),
               const SizedBox(width: kGapSm),
-              _valueCell(k),
+              KrValueCell(k),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// `3x10 / 3x12 reps`, or just the current value when the KR is track-only.
-  /// Both sides read as the notation that was typed. Scales down rather than
-  /// wrapping.
-  Widget _valueCell(Map<String, dynamic> k) {
-    final theme = Theme.of(context);
-    final unit = k['unit'] ?? '';
-    final text = k['target'] != null
-        ? '${currentLabel(k)} / ${targetLabel(k)} $unit'
-        : '${currentLabel(k)} $unit';
-    final delta = krDelta(k);
-    return ConstrainedBox(
-      // Fits "30 / 500 reps · 3x10"; longer text scales down.
-      constraints: const BoxConstraints(maxWidth: 140),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerRight,
-            child: Text(text.trim(),
-                maxLines: 1,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-          ),
-          if (delta != null) DeltaText(delta, down: krWantsDown(k)),
-        ],
       ),
     );
   }

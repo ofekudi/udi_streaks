@@ -275,4 +275,38 @@ void main() {
           ]));
     });
   });
+
+  group('trendSeries', () {
+    test('COUNT climbs by one per entry, whatever the values are', () {
+      // The values are ignored by COUNT, so plotting them would draw a flat
+      // line at 1 for a habit-fed key result.
+      expect(trendSeries([1, 1, 1, 1], 'COUNT'), [1, 2, 3, 4]);
+      expect(trendSeries([5, 5], 'COUNT'), [1, 2]);
+    });
+
+    test('SUM is a running total', () {
+      expect(trendSeries([10, 5, 2.5], 'SUM'), [10, 15, 17.5]);
+    });
+
+    test('LATEST plots the entries as they are', () {
+      expect(trendSeries([82, 79, 75], 'LATEST'), [82, 79, 75]);
+    });
+
+    test('an empty log has nothing to plot', () {
+      for (final aggregation in ['COUNT', 'SUM', 'LATEST']) {
+        expect(trendSeries([], aggregation), isEmpty, reason: aggregation);
+      }
+    });
+
+    test('the last point agrees with the folded current value', () {
+      // What makes the chart and the number above it tell the same story.
+      for (final aggregation in ['COUNT', 'SUM', 'LATEST']) {
+        const oldestFirst = [3.0, 7.0, 2.0];
+        final plotted = trendSeries(oldestFirst, aggregation);
+        expect(plotted.last,
+            aggregateValues(oldestFirst.reversed.toList(), aggregation),
+            reason: aggregation);
+      }
+    });
+  });
 }

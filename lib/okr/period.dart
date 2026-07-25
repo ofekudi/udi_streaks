@@ -26,7 +26,8 @@ class Period {
   DateTime get end =>
       DateTime(year, quarter * 3 + 1, 1).subtract(const Duration(seconds: 1));
 
-  Period get next => quarter == 4 ? Period(year + 1, 1) : Period(year, quarter + 1);
+  Period get next =>
+      quarter == 4 ? Period(year + 1, 1) : Period(year, quarter + 1);
 
   double get fractionElapsed {
     final total = end.difference(start).inSeconds;
@@ -37,4 +38,28 @@ class Period {
 
   @override
   String toString() => id;
+}
+
+/// Buckets timestamped [rows] into the quarters they fall in, newest quarter
+/// first and newest row first inside each. [at] reads the timestamp off a row.
+///
+/// This is what lets a history list carry its own quarter headings instead of
+/// making the reader pick between "by quarter" and "by entry".
+List<(Period, List<T>)> byPeriodDesc<T>(
+  List<T> rows,
+  DateTime Function(T) at,
+) {
+  final buckets = <String, List<T>>{};
+  final periods = <String, Period>{};
+  for (final row in rows) {
+    final period = Period.ofDate(at(row));
+    periods[period.id] = period;
+    buckets.putIfAbsent(period.id, () => []).add(row);
+  }
+  final ordered = periods.values.toList()
+    ..sort((a, b) => b.start.compareTo(a.start));
+  return [
+    for (final p in ordered)
+      (p, buckets[p.id]!..sort((a, b) => at(b).compareTo(at(a)))),
+  ];
 }

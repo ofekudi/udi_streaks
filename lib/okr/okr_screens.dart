@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
+import 'kr_row.dart';
 import 'log_value.dart';
 import 'period.dart';
+import 'scoring.dart';
 
 // =========================================================================
 // Key result edit — a full page (keyboard-friendly), reached from KR detail
@@ -55,6 +57,16 @@ class _KrEditScreenState extends State<KrEditScreen> {
     _baseline.dispose();
     _unit.dispose();
     super.dispose();
+  }
+
+  /// Shown when the target is a bare number. "3x12" is only stored if it's
+  /// typed that way — a key result created before the notation was kept has the
+  /// parsed total and nothing else, and 36 can't be turned back into 3x12.
+  String? get _notationHint {
+    final raw = _target.text.trim();
+    final v = parseValue(raw);
+    if (v == null || raw != fmtNum(v)) return null;
+    return 'Shows as "$raw" everywhere. Write it as 3x12 to keep that.';
   }
 
   String get _aggExplainer =>
@@ -169,14 +181,12 @@ class _KrEditScreenState extends State<KrEditScreen> {
                   keyboardType: TextInputType.text,
                   autocorrect: false,
                   enableSuggestions: false,
-                  onChanged: (_) {
-                    if (_targetError != null) {
-                      setState(() => _targetError = null);
-                    }
-                  },
+                  onChanged: (_) => setState(() => _targetError = null),
                   decoration: InputDecoration(
                     hintText: 'e.g. 3x12',
                     errorText: _targetError,
+                    helperText: _notationHint,
+                    helperMaxLines: 2,
                   ),
                 ),
               ),
@@ -279,11 +289,9 @@ class KrDetailScreen extends StatefulWidget {
 
 class _KrDetailScreenState extends State<KrDetailScreen> {
   late Map<String, dynamic> kr;
-  final _logValue = TextEditingController();
   List<Map<String, dynamic>> _series = [];
   List<Map<String, dynamic>> _periods = [];
   List<Map<String, dynamic>> _grades = [];
-  bool _byQuarter = true;
   bool _loading = true;
 
   @override
@@ -291,12 +299,6 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     super.initState();
     kr = widget.kr;
     _load();
-  }
-
-  @override
-  void dispose() {
-    _logValue.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -332,36 +334,6 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     return null;
   }
 
-  Future<void> _log() async {
-    final raw = _logValue.text.trim();
-    if (!await logKrValue(kr, raw)) {
-      if (raw.isNotEmpty && mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text(kLogValueHelp)));
-      }
-      return;
-    }
-    _logValue.clear();
-    if (mounted) FocusScope.of(context).unfocus();
-    await _load();
-  }
-
-  /// What the big number is — total, count or latest entry — and the window it
-  /// covers, in the same wording the edit form uses.
-  String get _measureCaption {
-    final scope = switch (kr['window_mode'] ?? 'OBJECTIVE') {
-      'ALL' => 'all time',
-      'YEAR' => 'this year',
-      'ROLLING' => 'the last ${kr['window_days'] ?? 30} days',
-      _ => 'this quarter',
-    };
-    return switch (kr['aggregation'] ?? 'LATEST') {
-      'COUNT' => 'How many times you logged it · $scope',
-      'SUM' => 'Everything you logged, added up · $scope',
-      _ => 'Your latest logged value',
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final objective = kr['objective_title'] as String?;
@@ -395,22 +367,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                               Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: kGapSm),
                 ],
-                _summaryCard(),
-                const SizedBox(height: kGapLg),
-                const SectionHeader('Log a value',
-                    subtitle: 'A number, or "3x10" / "10,9,8" — we add it up'),
-                // Inline logger — no modal, no keyboard cover.
-                Row(children: [
-                  Expanded(
-                    child: LogValueField(
-                      controller: _logValue,
-                      unit: kr['unit'] as String?,
-                      onSubmit: _log,
-                    ),
-                  ),
-                  const SizedBox(width: kGapSm),
-                  FilledButton(onPressed: _log, child: const Text('Add')),
-                ]),
+                KrSummaryRow(kr),
                 const SizedBox(height: kGapXl),
                 const SectionHeader('History'),
                 if (_series.isEmpty) _historyEmpty() else ..._history(),
@@ -419,112 +376,98 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     );
   }
 
-  /// Current value, what it measures, and the bar and target when there is one.
-  Widget _summaryCard() {
-    final theme = Theme.of(context);
-    final unit = kr['unit'] ?? '';
-    final score = kr['score'] as double?;
-    final delta = krDelta(kr);
-    return Card(
-      child: Padding(
-        padding: kFormPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Text('${currentLabel(kr)} $unit'.trim(),
-                      style: theme.textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                ),
-                if (delta != null) DeltaText(delta, down: krWantsDown(kr)),
-              ],
-            ),
-            const SizedBox(height: kGapXs),
-            Text(_measureCaption + _sincePrevious(),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            if (kr['target'] == null) ...[
-              const SizedBox(height: kGapSm),
-              Text('No target — just tracking the trend',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ] else ...[
-              const SizedBox(height: kGapMd),
-              ScoreBar(score ?? 0, down: krWantsDown(kr)),
-              const SizedBox(height: kGapSm),
-              Text(_goalLine(), style: theme.textTheme.bodySmall),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// `from 3x10 → 3x12 reps` when the KR has a starting point, else
-  /// `target 3x12 reps`. A starting point implies its own direction, so the
-  /// "lower is better" note only appears without one.
-  String _goalLine() {
-    final unit = kr['unit'] ?? '';
-    final target = '${targetLabel(kr)} $unit'.trim();
-    final from = baselineLabel(kr);
-    if (from.isNotEmpty) return 'from $from → $target';
-    final down = kr['direction'] == 'DOWN';
-    return 'target $target${down ? ' · lower is better' : ''}';
-  }
-
-  /// ` · since 12 Jul` — dates the delta shown next to the current value.
-  String _sincePrevious() {
-    if (krDelta(kr) == null || _series.length < 2) return '';
-    final at = DateTime.parse(_series[_series.length - 2]['recorded_at']);
-    return ' · since ${fmtDate(at)}';
-  }
-
-  /// Sparkline, the by-quarter/by-entry switch, and the rows. Only built when
-  /// there is at least one entry.
+  /// The sparkline, then every entry newest first under the quarter it belongs
+  /// to. One list rather than a by-quarter/by-entry switch: the heading carries
+  /// what the quarter view used to say — its total, and its grade once given —
+  /// so nothing was traded away for losing the toggle.
   List<Widget> _history() {
-    final unit = kr['unit'] ?? '';
-    final points = _series.map((m) => (m['value'] as num).toDouble()).toList();
+    // A running total for SUM and COUNT — the raw values of a COUNT are all 1
+    // and would draw a flat line.
+    final points = trendSeries(
+      [for (final m in _series) (m['value'] as num).toDouble()],
+      (kr['aggregation'] ?? 'LATEST') as String,
+    );
     return [
-      if (points.length > 1)
+      if (points.length > 1) ...[
         Card(
           child: Padding(
             padding: kListPadding,
             child: Sparkline(points, height: 80),
           ),
         ),
-      if (points.length > 1) const SizedBox(height: kGapMd),
-      SegmentedButton<bool>(
-        segments: const [
-          ButtonSegment(value: true, label: Text('By quarter')),
-          ButtonSegment(value: false, label: Text('By entry')),
-        ],
-        selected: {_byQuarter},
-        onSelectionChanged: (s) => setState(() => _byQuarter = s.first),
-      ),
-      const SizedBox(height: kGapSm),
-      if (_byQuarter)
-        for (final p in _periods)
-          ListTile(
-            dense: true,
-            title: Text(p['period']),
-            subtitle: Text('${fmtNum(p['value'])} $unit'.trim()),
-            trailing: _gradeFor(p['period']) == null
-                ? null
-                : GradeBar(_gradeFor(p['period'])),
-          )
-      else
-        for (final m in _series.reversed)
-          ListTile(
-            dense: true,
-            title: Text(fmtDate(DateTime.parse(m['recorded_at']))),
-            // The notation as typed; the trailing number is what it parsed to.
-            subtitle: (m['note'] != null) ? Text(m['note']) : null,
-            trailing: Text('${fmtNum(m['value'])} $unit'.trim()),
-          ),
+        const SizedBox(height: kGapLg),
+      ],
+      for (final (period, entries) in byPeriodDesc(
+          _series, (m) => DateTime.parse(m['recorded_at'] as String)))
+        _quarterSection(period, entries),
     ];
+  }
+
+  Widget _quarterSection(Period period, List<Map<String, dynamic>> entries) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final unit = kr['unit'] ?? '';
+    final grade = _gradeFor(period.id);
+    final total = _totalFor(period.id);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: kGapMd, bottom: kGapSm),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(period.label,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800, color: muted)),
+              ),
+              if (total != null)
+                Text('${fmtNum(total)} $unit'.trim(),
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+              // GradeBar sizes itself to ten fixed segments; don't box it.
+              if (grade != null) ...[
+                const SizedBox(width: kGapSm),
+                GradeBar(grade),
+              ],
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        for (final m in entries) _entryRow(m, unit),
+      ],
+    );
+  }
+
+  /// One entry: the day it was logged, and what was logged in the notation it
+  /// was typed in.
+  Widget _entryRow(Map<String, dynamic> m, String unit) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: kGapSm, horizontal: kGapXs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(fmtDate(DateTime.parse(m['recorded_at'] as String)),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8))),
+          ),
+          Text('${entryLabel(m)} $unit'.trim(),
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  /// The quarter's folded value, from the same summaries the by-quarter list
+  /// used, so a COUNT reads as a count and a SUM as a total.
+  num? _totalFor(String period) {
+    for (final p in _periods) {
+      if (p['period'] == period) return p['value'] as num?;
+    }
+    return null;
   }
 
   Widget _historyEmpty() {
@@ -541,8 +484,8 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: kGapXs),
           Text(
-              'Log a value above. Entries land here, and add up into the '
-              'quarter you can grade later.',
+              'Log this from the Record page. Entries land here under the '
+              'quarter they belong to.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(color: muted)),
         ],
@@ -627,7 +570,7 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
             ]),
             if (_carriesOver(k))
               Text(
-                  'renews starting at ${fmtNum(k['current'] as num?)} '
+                  'renews starting at ${currentLabel(k)} '
                           '${k['unit'] ?? ''}'
                       .trim(),
                   style: theme.textTheme.bodySmall
@@ -747,8 +690,7 @@ class _HistoryTabState extends State<HistoryTab> {
                           child: ListTile(
                             title: Text(k['title']),
                             subtitle: Text(
-                                '${fmtNum(k['current'])} ${k['unit'] ?? ''}'
-                                    .trim()),
+                                '${currentLabel(k)} ${k['unit'] ?? ''}'.trim()),
                             trailing: const Icon(Icons.show_chart),
                             onTap: () => Navigator.push(
                               context,

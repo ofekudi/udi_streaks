@@ -49,11 +49,23 @@ Every row is at most two lines — title, then a `ScoreBar` — and the only num
 in the tree is a key result's `X / Y`, in a right-hand column beside both lines
 so the title keeps its own line. Objectives and areas show their rollup as the
 bar alone; `fmtScore` is only used by the quarter-close screen.
+That row lives in `okr/kr_row.dart`: `KrValueCell` is the `X / Y` column the tree
+and the detail screen share, and `KrSummaryRow` is the whole row, which is how
+`KrDetailScreen` opens — the same shape the tree row you tapped had, so the
+number can't read differently on the two screens.
 Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
 `QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
 most-recently-logged-first capture list). Measurement writes go through
 `okr/log_value.dart` so the Record page and KR detail can't drift apart — the
 one exception is `DBHelper._insertCompletion`, below.
+
+`KrDetailScreen` **states the number and shows the history, and does not log** —
+the Record page is the only place a value is entered. Its history is one list
+with no view switch: `byPeriodDesc` (`okr/period.dart`) buckets entries into
+quarters, and each quarter heading carries the total and the grade the
+by-quarter view used to show. The sparkline plots `trendSeries`
+(`okr/scoring.dart`), a running total for `SUM` and `COUNT` — a COUNT's raw
+values are all 1 and would draw a flat line.
 
 A habit can **feed a COUNT key result**: ticking the habit also counts there.
 The link is offered on the habit side only — `habit_detail_sheet.dart` gains
