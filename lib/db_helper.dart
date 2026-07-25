@@ -26,7 +26,7 @@ class DBHelper {
     String path = join(await getDatabasesPath(), 'habits_database.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -85,6 +85,17 @@ class DBHelper {
     if (oldVersion < 3) {
       await _createOkrTables(db);
     }
+
+    // Versions 4 and 5 add key_results columns. Skipped when _createOkrTables
+    // above just created the table with them in it.
+    if (oldVersion >= 3 && oldVersion < 4) {
+      await db.execute('ALTER TABLE key_results ADD COLUMN target_raw TEXT');
+    }
+    if (oldVersion >= 3 && oldVersion < 5) {
+      await db
+          .execute('ALTER TABLE key_results ADD COLUMN baseline_value REAL');
+      await db.execute('ALTER TABLE key_results ADD COLUMN baseline_raw TEXT');
+    }
   }
 
   /// Creates the OKR layer: areas -> objectives -> key_results (intent),
@@ -140,6 +151,13 @@ class DBHelper {
         aggregation TEXT NOT NULL,
         source TEXT NOT NULL DEFAULT 'MEASUREMENT',
         target_value REAL,
+        -- How the target was typed when it wasn't a plain number ("3x10").
+        -- Display only; every comparison runs on target_value.
+        target_raw TEXT,
+        -- Where the key result started. Progress is measured from here when
+        -- set; baseline_raw is the same display-only notation as target_raw.
+        baseline_value REAL,
+        baseline_raw TEXT,
         direction TEXT NOT NULL DEFAULT 'UP',
         unit TEXT,
         window_mode TEXT NOT NULL DEFAULT 'OBJECTIVE',
@@ -275,7 +293,7 @@ class DBHelper {
       // If one is skipped and the other isn't, prioritize the non-skipped one
       if (a['skipped_today'] && !b['skipped_today']) return 1;
       if (!a['skipped_today'] && b['skipped_today']) return -1;
-      
+
       // If both have the same skip status, sort by current streak (descending)
       return (b['current_streak'] as int).compareTo(a['current_streak'] as int);
     });
@@ -527,7 +545,7 @@ class DBHelper {
 
       // Get all habits
       final habits = await db.query('habits');
-      
+
       int completed = 0;
       int total = habits.length;
 
@@ -575,7 +593,8 @@ class DBHelper {
 
   // ---------- Areas ----------
 
-  Future<String> insertArea(String name, {String? icon, int sortOrder = 0}) async {
+  Future<String> insertArea(String name,
+      {String? icon, int sortOrder = 0}) async {
     final db = await database;
     final id = uuid.v4();
     await db.insert('areas', {
@@ -712,8 +731,8 @@ class DBHelper {
   /// archives the original. Non-destructive: measurements are never touched.
   Future<String> renewObjective(String objectiveId) async {
     final db = await database;
-    final rows =
-        await db.query('objectives', where: 'id = ?', whereArgs: [objectiveId], limit: 1);
+    final rows = await db.query('objectives',
+        where: 'id = ?', whereArgs: [objectiveId], limit: 1);
     if (rows.isEmpty) return objectiveId;
     final o = rows.first;
     final next = Period.ofDate(DateTime.parse(o['start_date'] as String)).next;
@@ -733,9 +752,27 @@ class DBHelper {
     });
     await db.update('objectives', {'status': 'archived', 'updated_at': now},
         where: 'id = ?', whereArgs: [objectiveId]);
-    final krs =
-        await db.query('key_results', where: 'objective_id = ?', whereArgs: [objectiveId]);
+    final krs = await db.query('key_results',
+        where: 'objective_id = ?', whereArgs: [objectiveId]);
     for (final k in krs) {
+      // A Value key result starts the new quarter where this one ended, so a
+      // "3x10 -> 3x12" goal doesn't have to be rebuilt by hand; its last entry
+      // becomes the new baseline, notation included. With nothing logged, the
+      // declared baseline carries over unchanged.
+      Object? baseline = k['baseline_value'];
+      Object? baselineRaw = k['baseline_raw'];
+      if (k['aggregation'] == 'LATEST') {
+        final last = await db.query('measurements',
+            columns: ['value', 'note'],
+            where: 'key_result_id = ?',
+            whereArgs: [k['id']],
+            orderBy: 'recorded_at DESC',
+            limit: 1);
+        if (last.isNotEmpty) {
+          baseline = last.first['value'];
+          baselineRaw = last.first['note'];
+        }
+      }
       await db.insert('key_results', {
         'id': uuid.v4(),
         'objective_id': newId,
@@ -744,6 +781,9 @@ class DBHelper {
         'aggregation': k['aggregation'],
         'source': k['source'],
         'target_value': k['target_value'],
+        'target_raw': k['target_raw'],
+        'baseline_value': baseline,
+        'baseline_raw': baselineRaw,
         'direction': k['direction'],
         'unit': k['unit'],
         'window_mode': k['window_mode'],
@@ -768,6 +808,9 @@ class DBHelper {
     required String aggregation,
     String source = 'MEASUREMENT',
     double? target,
+    String? targetRaw,
+    double? baseline,
+    String? baselineRaw,
     String direction = 'UP',
     String? unit,
     String windowMode = 'OBJECTIVE',
@@ -787,6 +830,9 @@ class DBHelper {
       'aggregation': aggregation,
       'source': source,
       'target_value': target,
+      'target_raw': targetRaw,
+      'baseline_value': baseline,
+      'baseline_raw': baselineRaw,
       'direction': direction,
       'unit': unit,
       'window_mode': windowMode,
@@ -812,7 +858,11 @@ class DBHelper {
     String? title,
     String? aggregation,
     double? target,
+    String? targetRaw,
     bool clearTarget = false,
+    double? baseline,
+    String? baselineRaw,
+    bool clearBaseline = false,
     String? direction,
     String? unit,
     String? windowMode,
@@ -829,8 +879,18 @@ class DBHelper {
     if (aggregation != null) data['aggregation'] = aggregation;
     if (clearTarget) {
       data['target_value'] = null;
+      data['target_raw'] = null;
     } else if (target != null) {
       data['target_value'] = target;
+      // Written unconditionally, so retyping "30" over "3x10" clears it.
+      data['target_raw'] = targetRaw;
+    }
+    if (clearBaseline) {
+      data['baseline_value'] = null;
+      data['baseline_raw'] = null;
+    } else if (baseline != null) {
+      data['baseline_value'] = baseline;
+      data['baseline_raw'] = baselineRaw;
     }
     if (direction != null) data['direction'] = direction;
     if (unit != null) data['unit'] = unit;
@@ -853,8 +913,8 @@ class DBHelper {
   /// A single key result merged with its live computed state.
   Future<Map<String, dynamic>?> getKeyResultsById(String id) async {
     final db = await database;
-    final rows = await db
-        .query('key_results', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query('key_results',
+        where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     final k = rows.first;
     Map<String, dynamic>? obj;
@@ -972,6 +1032,7 @@ class DBHelper {
       direction: (kr['direction'] ?? 'UP') as String,
       mode: mode,
       target: (kr['target_value'] as num?)?.toDouble(),
+      baseline: (kr['baseline_value'] as num?)?.toDouble(),
       unit: kr['unit'] as String?,
       valuesNewestFirst: [
         for (final r in rows) (r['value'] as num).toDouble(),
@@ -1036,8 +1097,8 @@ class DBHelper {
     String? keyResultId,
     String aggregation = 'SUM',
   }) async {
-    final series =
-        await getMeasurementSeries(trackableId: trackableId, keyResultId: keyResultId);
+    final series = await getMeasurementSeries(
+        trackableId: trackableId, keyResultId: keyResultId);
     final byPeriod = <String, List<double>>{};
     for (final m in series) {
       final p = Period.ofDate(DateTime.parse(m['recorded_at'] as String)).id;
@@ -1092,7 +1153,8 @@ class DBHelper {
         'graded_at': now,
       });
     } else {
-      await db.update('reviews', {'grade': grade, 'note': note, 'graded_at': now},
+      await db.update(
+          'reviews', {'grade': grade, 'note': note, 'graded_at': now},
           where: 'id = ?', whereArgs: [existing.first['id']]);
     }
   }
@@ -1111,6 +1173,8 @@ class DBHelper {
   Future<List<Map<String, dynamic>>> getGradeHistory(String subjectId) async {
     final db = await database;
     return db.query('reviews',
-        where: 'subject_id = ?', whereArgs: [subjectId], orderBy: 'period DESC');
+        where: 'subject_id = ?',
+        whereArgs: [subjectId],
+        orderBy: 'period DESC');
   }
 }

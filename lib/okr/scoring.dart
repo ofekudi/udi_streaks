@@ -66,16 +66,54 @@ double? aggregateValues(List<double> valuesNewestFirst, String aggregation) {
   }
 }
 
+/// The value of the entry before the newest one, or null when there isn't one.
+///
+/// Only defined for `LATEST`: the previous entry is a previous *state* there,
+/// while for `SUM` and `COUNT` it's one contribution to a running total and
+/// comparing against it says nothing.
+double? previousValue(List<double> valuesNewestFirst, String aggregation) {
+  if (aggregation != 'LATEST' || valuesNewestFirst.length < 2) return null;
+  return valuesNewestFirst[1];
+}
+
+/// Whether lower is better for this key result.
+///
+/// With a baseline the goal's direction is the sign of `target - baseline`, so
+/// `82 → 75` is a DOWN goal whatever the `direction` column says. Without one,
+/// `direction` is all there is.
+bool wantsDown({
+  double? baseline,
+  double? target,
+  required String direction,
+}) {
+  if (baseline != null && target != null && target != baseline) {
+    return target < baseline;
+  }
+  return direction == 'DOWN';
+}
+
 /// Progress toward [target] as a 0..1 fraction, or null when the KR is
 /// track-only (no target) or has no value yet.
 ///
-/// A `DOWN` key result is one where lower is better, so the ratio inverts.
+/// With a [baseline] progress is measured from where the KR started, so a
+/// `3x10 → 3x12` goal reads 0% at 30 and 50% at 33 rather than 83% and 92%. The
+/// sign of `target - baseline` carries the direction, so [direction] is unused
+/// in that case, and a target of 0 is a valid destination.
+///
+/// Without a baseline, an `UP` key result is `current / target` and a `DOWN` one
+/// inverts the ratio.
 double? scoreFor({
   required double? current,
   required double? target,
   required String direction,
+  double? baseline,
 }) {
-  if (target == null || target == 0 || current == null) return null;
+  if (target == null || current == null) return null;
+  if (baseline != null) {
+    if (target == baseline) return null;
+    return ((current - baseline) / (target - baseline)).clamp(0.0, 1.0);
+  }
+  if (target == 0) return null;
   final raw = direction == 'DOWN'
       ? (current <= 0 ? 1.0 : target / current)
       : current / target;
@@ -117,6 +155,9 @@ class KrComputation {
   final String aggregation;
   final String direction;
 
+  /// The entry before the newest one — see [previousValue].
+  final double? previous;
+
   const KrComputation({
     required this.current,
     required this.target,
@@ -125,6 +166,7 @@ class KrComputation {
     required this.onPace,
     required this.aggregation,
     required this.direction,
+    this.previous,
   });
 
   Map<String, dynamic> toMap() => {
@@ -135,6 +177,7 @@ class KrComputation {
         'on_pace': onPace,
         'aggregation': aggregation,
         'direction': direction,
+        'previous': previous,
       };
 }
 
@@ -148,15 +191,22 @@ KrComputation computeKrState({
   required List<double> valuesNewestFirst,
   required DateTime start,
   required DateTime end,
+  double? baseline,
   DateTime? now,
 }) {
   final current = aggregateValues(valuesNewestFirst, aggregation);
-  final score = scoreFor(current: current, target: target, direction: direction);
+  final score = scoreFor(
+    current: current,
+    target: target,
+    direction: direction,
+    baseline: baseline,
+  );
   return KrComputation(
     current: current,
     target: target,
     score: score,
     unit: unit,
+    previous: previousValue(valuesNewestFirst, aggregation),
     onPace: paceFor(
       score: score,
       fractionElapsed:

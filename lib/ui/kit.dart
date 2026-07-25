@@ -146,8 +146,7 @@ Future<void> showActionSheet(
           ),
           for (final a in actions)
             ListTile(
-              leading: Icon(a.icon,
-                  color: a.destructive ? Colors.red : null),
+              leading: Icon(a.icon, color: a.destructive ? Colors.red : null),
               title: Text(a.label,
                   style: a.destructive
                       ? const TextStyle(color: Colors.red)
@@ -439,37 +438,29 @@ String fmtDate(DateTime d) =>
 /// A neutral 0–1 OKR score, e.g. "0.71".
 String fmtScore(double? s) => s == null ? '–' : s.toStringAsFixed(2);
 
-class PacePill extends StatelessWidget {
-  final String? pace; // on_track | behind | ahead | null
-  const PacePill(this.pace, {super.key});
+/// The move since the previous entry, e.g. `▲ +6`. Green when it went the way
+/// the key result wants, orange when it went against it, muted when unchanged.
+class DeltaText extends StatelessWidget {
+  final double delta;
+  final bool down;
+  const DeltaText(this.delta, {super.key, this.down = false});
 
   @override
   Widget build(BuildContext context) {
-    if (pace == null) return const SizedBox.shrink();
-    late Color fg;
-    late String label;
-    switch (pace) {
-      case 'ahead':
-        fg = Theme.of(context).colorScheme.primary;
-        label = 'ahead';
-        break;
-      case 'behind':
-        fg = Colors.orange.shade800;
-        label = 'behind';
-        break;
-      default:
-        fg = Colors.green.shade700;
-        label = 'on track';
+    final theme = Theme.of(context);
+    final base = theme.textTheme.bodySmall;
+    if (delta == 0) {
+      return Text('±0',
+          style: base?.copyWith(color: theme.colorScheme.onSurfaceVariant));
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: kGapSm, vertical: 3),
-      decoration: BoxDecoration(
-        color: fg.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+    final up = delta > 0;
+    final good = down ? !up : up;
+    return Text(
+      '${up ? '▲' : '▼'} ${up ? '+' : '−'}${fmtNum(delta.abs())}',
+      style: base?.copyWith(
+        color: good ? Colors.green.shade700 : Colors.orange.shade800,
+        fontWeight: FontWeight.w700,
       ),
-      child: Text(label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: fg, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
     );
   }
 }
@@ -488,8 +479,7 @@ class ScoreBar extends StatelessWidget {
       child: LinearProgressIndicator(
         value: value.clamp(0.0, 1.0),
         minHeight: 6,
-        backgroundColor:
-            Theme.of(context).colorScheme.surfaceContainerHighest,
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         valueColor: AlwaysStoppedAnimation(color),
       ),
     );

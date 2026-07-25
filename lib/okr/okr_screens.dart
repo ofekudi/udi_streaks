@@ -20,20 +20,29 @@ class KrEditScreen extends StatefulWidget {
 class _KrEditScreenState extends State<KrEditScreen> {
   late final TextEditingController _title;
   late final TextEditingController _target;
+  late final TextEditingController _baseline;
   late final TextEditingController _unit;
   late String _agg;
   late String _direction;
   String? _targetError;
+  String? _baselineError;
 
   @override
   void initState() {
     super.initState();
     final k = widget.kr;
     _title = TextEditingController(text: k?['title'] ?? '');
+    // The notation as typed ("3x10") when we have it, else the parsed number.
     _target = TextEditingController(
-        text: k?['target_value'] != null
-            ? fmtNum(k!['target_value'] as num)
-            : '');
+        text: (k?['target_raw'] as String?) ??
+            (k?['target_value'] != null
+                ? fmtNum(k!['target_value'] as num)
+                : ''));
+    _baseline = TextEditingController(
+        text: (k?['baseline_raw'] as String?) ??
+            (k?['baseline_value'] != null
+                ? fmtNum(k!['baseline_value'] as num)
+                : ''));
     _unit = TextEditingController(text: k?['unit'] ?? '');
     _agg = (k?['aggregation'] as String?) ?? 'LATEST';
     _direction = k?['direction'] ?? 'UP';
@@ -43,6 +52,7 @@ class _KrEditScreenState extends State<KrEditScreen> {
   void dispose() {
     _title.dispose();
     _target.dispose();
+    _baseline.dispose();
     _unit.dispose();
     super.dispose();
   }
@@ -65,9 +75,7 @@ class _KrEditScreenState extends State<KrEditScreen> {
             height: kTapTarget,
             child: Center(
               child: Icon(
-                up
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded,
+                up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
                 color: color.shade800,
               ),
             ),
@@ -99,21 +107,28 @@ class _KrEditScreenState extends State<KrEditScreen> {
           ),
           const SizedBox(height: kGapXl),
           const SectionHeader('How do you want to measure it?'),
-          for (final a in kAggregations)
-            RadioListTile<String>(
-              value: a.value,
-              groupValue: _agg,
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              title: Text(a.label,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-              subtitle:
-                  Text(a.explainer, style: Theme.of(context).textTheme.bodySmall),
-              onChanged: (v) => setState(() => _agg = v!),
+          // RadioListTile's own groupValue/onChanged are deprecated.
+          RadioGroup<String>(
+            groupValue: _agg,
+            onChanged: (v) => setState(() => _agg = v!),
+            child: Column(
+              children: [
+                for (final a in kAggregations)
+                  RadioListTile<String>(
+                    value: a.value,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(a.label,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    subtitle: Text(a.explainer,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ),
+              ],
             ),
+          ),
           const SizedBox(height: kGapMd),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,12 +165,42 @@ class _KrEditScreenState extends State<KrEditScreen> {
                   flex: 3,
                   child: TextField(
                     controller: _unit,
-                    decoration: const InputDecoration(labelText: 'Unit'),
+                    decoration: const InputDecoration(
+                      labelText: 'Unit',
+                      hintText: 'reps, km…',
+                    ),
                   ),
                 ),
               ],
             ],
           ),
+          // A starting point only makes sense for a level you're moving. Total
+          // and Count start at zero every quarter by definition.
+          if (_agg == 'LATEST') ...[
+            const SizedBox(height: kGapMd),
+            TextField(
+              controller: _baseline,
+              keyboardType: TextInputType.text,
+              autocorrect: false,
+              enableSuggestions: false,
+              onChanged: (_) {
+                if (_baselineError != null) {
+                  setState(() => _baselineError = null);
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Starting at',
+                hintText: 'e.g. 3x10 — where you are today',
+                errorText: _baselineError,
+              ),
+            ),
+            const SizedBox(height: kGapSm),
+            Text(
+                'With a starting point, progress runs from there to the target: '
+                '3x10 → 3x12 reads 0% at 3x10, not 83%.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ],
           const SizedBox(height: kGapSm),
           Text(
               'Leave the target empty to just track it over time — no goal, just the trend.',
@@ -184,6 +229,20 @@ class _KrEditScreenState extends State<KrEditScreen> {
     // Window is inferred, not asked: a "Latest" level always shows the newest
     // value (all-time); Count/Total goals accumulate within the objective.
     final window = _agg == 'LATEST' ? 'ALL' : 'OBJECTIVE';
+    // Stored only when it differs from the parsed number.
+    final targetRaw =
+        target != null && rawTarget != fmtNum(target) ? rawTarget : null;
+    // Only Value key results offer a starting point, so anything left over from
+    // a KR that used to be one is dropped rather than left scoring silently.
+    final rawBaseline = _agg == 'LATEST' ? _baseline.text.trim() : '';
+    final baseline = parseValue(rawBaseline);
+    if (rawBaseline.isNotEmpty && baseline == null) {
+      setState(() => _baselineError = kLogValueHelp);
+      return;
+    }
+    final baselineRaw = baseline != null && rawBaseline != fmtNum(baseline)
+        ? rawBaseline
+        : null;
 
     if (k == null) {
       await db.insertKeyResult(
@@ -191,6 +250,9 @@ class _KrEditScreenState extends State<KrEditScreen> {
         title: title,
         aggregation: _agg,
         target: target,
+        targetRaw: targetRaw,
+        baseline: baseline,
+        baselineRaw: baselineRaw,
         direction: _direction,
         unit: unit,
         windowMode: window,
@@ -201,7 +263,11 @@ class _KrEditScreenState extends State<KrEditScreen> {
         title: title,
         aggregation: _agg,
         target: target,
+        targetRaw: targetRaw,
         clearTarget: target == null,
+        baseline: baseline,
+        baselineRaw: baselineRaw,
+        clearBaseline: baseline == null,
         direction: _direction,
         unit: unit,
         windowMode: window,
@@ -292,11 +358,25 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     await _load();
   }
 
+  /// What the big number is — total, count or latest entry — and the window it
+  /// covers, in the same wording the edit form uses.
+  String get _measureCaption {
+    final scope = switch (kr['window_mode'] ?? 'OBJECTIVE') {
+      'ALL' => 'all time',
+      'YEAR' => 'this year',
+      'ROLLING' => 'the last ${kr['window_days'] ?? 30} days',
+      _ => 'this quarter',
+    };
+    return switch (kr['aggregation'] ?? 'LATEST') {
+      'COUNT' => 'How many times you logged it · $scope',
+      'SUM' => 'Everything you logged, added up · $scope',
+      _ => 'Your latest logged value',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final unit = kr['unit'] ?? '';
-    final points =
-        _series.map((m) => (m['value'] as num).toDouble()).toList();
+    final objective = kr['objective_title'] as String?;
     return Scaffold(
       appBar: AppBar(
         title: Text(kr['title']),
@@ -304,6 +384,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
           if (widget.editable)
             IconButton(
               icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit key result',
               onPressed: () async {
                 final changed = await Navigator.push<bool>(
                   context,
@@ -319,6 +400,17 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
           : ListView(
               padding: kFormPadding,
               children: [
+                if (objective != null) ...[
+                  Text('in $objective',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: kGapSm),
+                ],
+                _summaryCard(),
+                const SizedBox(height: kGapLg),
+                const SectionHeader('Log a value',
+                    subtitle: 'A number, or "3x10" / "10,9,8" — we add it up'),
                 // Inline logger — no modal, no keyboard cover.
                 Row(children: [
                   Expanded(
@@ -331,67 +423,144 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                   const SizedBox(width: kGapSm),
                   FilledButton(onPressed: _log, child: const Text('Add')),
                 ]),
-                const SizedBox(height: kGapLg),
-                Card(
-                  child: Padding(
-                    padding: kFormPadding,
-                    child: Column(children: [
-                      Text('${fmtNum(kr['current'])} $unit',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w800)),
-                      if (kr['target'] != null)
-                        Text('target ${fmtNum(kr['target'])} $unit',
-                            style: Theme.of(context).textTheme.bodySmall),
-                    ]),
-                  ),
-                ),
-                const SizedBox(height: kGapMd),
-                if (points.isNotEmpty)
-                  Card(
-                    child: Padding(
-                      padding: kListPadding,
-                      child: Sparkline(points, height: 80),
-                    ),
-                  ),
-                const SizedBox(height: kGapMd),
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: true, label: Text('By quarter')),
-                    ButtonSegment(value: false, label: Text('By entry')),
-                  ],
-                  selected: {_byQuarter},
-                  onSelectionChanged: (s) =>
-                      setState(() => _byQuarter = s.first),
-                ),
-                const SizedBox(height: kGapSm),
-                if (_byQuarter)
-                  for (final p in _periods)
-                    ListTile(
-                      dense: true,
-                      title: Text(p['period']),
-                      subtitle: Text('${fmtNum(p['value'])} $unit'),
-                      trailing: _gradeFor(p['period']) == null
-                          ? null
-                          : GradeBar(_gradeFor(p['period'])),
-                    )
-                else
-                  for (final m in _series.reversed)
-                    ListTile(
-                      dense: true,
-                      title: Text(fmtDate(DateTime.parse(m['recorded_at']))),
-                      subtitle: (m['note'] != null) ? Text(m['note']) : null,
-                      trailing: Text('${fmtNum(m['value'])} $unit'),
-                    ),
-                if ((_byQuarter && _periods.isEmpty) ||
-                    (!_byQuarter && _series.isEmpty))
-                  const Padding(
-                    padding: EdgeInsets.all(kGapXl),
-                    child: Center(child: Text('No entries yet.')),
-                  ),
+                const SizedBox(height: kGapXl),
+                const SectionHeader('History'),
+                if (_series.isEmpty) _historyEmpty() else ..._history(),
               ],
             ),
+    );
+  }
+
+  /// Current value, what it measures, and the bar and target when there is one.
+  Widget _summaryCard() {
+    final theme = Theme.of(context);
+    final unit = kr['unit'] ?? '';
+    final score = kr['score'] as double?;
+    final delta = krDelta(kr);
+    return Card(
+      child: Padding(
+        padding: kFormPadding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  // Nothing logged reads as 0, not "–".
+                  child: Text(
+                      '${fmtNum((kr['current'] as num?) ?? 0)} $unit'.trim(),
+                      style: theme.textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                ),
+                if (delta != null) DeltaText(delta, down: krWantsDown(kr)),
+              ],
+            ),
+            const SizedBox(height: kGapXs),
+            Text(_measureCaption + _sincePrevious(),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            if (kr['target'] == null) ...[
+              const SizedBox(height: kGapSm),
+              Text('No target — just tracking the trend',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ] else ...[
+              const SizedBox(height: kGapMd),
+              ScoreBar(score ?? 0, down: krWantsDown(kr)),
+              const SizedBox(height: kGapSm),
+              Text(_goalLine(), style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// `from 3x10 → 3x12 reps` when the KR has a starting point, else
+  /// `target 3x12 reps`. A starting point implies its own direction, so the
+  /// "lower is better" note only appears without one.
+  String _goalLine() {
+    final unit = kr['unit'] ?? '';
+    final target = '${fmtNum(kr['target'])} $unit${targetNotation(kr)}'.trim();
+    final from = baselineLabel(kr);
+    if (from.isNotEmpty) return 'from $from → $target';
+    final down = kr['direction'] == 'DOWN';
+    return 'target $target${down ? ' · lower is better' : ''}';
+  }
+
+  /// ` · since 12 Jul` — dates the delta shown next to the current value.
+  String _sincePrevious() {
+    if (krDelta(kr) == null || _series.length < 2) return '';
+    final at = DateTime.parse(_series[_series.length - 2]['recorded_at']);
+    return ' · since ${fmtDate(at)}';
+  }
+
+  /// Sparkline, the by-quarter/by-entry switch, and the rows. Only built when
+  /// there is at least one entry.
+  List<Widget> _history() {
+    final unit = kr['unit'] ?? '';
+    final points = _series.map((m) => (m['value'] as num).toDouble()).toList();
+    return [
+      if (points.length > 1)
+        Card(
+          child: Padding(
+            padding: kListPadding,
+            child: Sparkline(points, height: 80),
+          ),
+        ),
+      if (points.length > 1) const SizedBox(height: kGapMd),
+      SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(value: true, label: Text('By quarter')),
+          ButtonSegment(value: false, label: Text('By entry')),
+        ],
+        selected: {_byQuarter},
+        onSelectionChanged: (s) => setState(() => _byQuarter = s.first),
+      ),
+      const SizedBox(height: kGapSm),
+      if (_byQuarter)
+        for (final p in _periods)
+          ListTile(
+            dense: true,
+            title: Text(p['period']),
+            subtitle: Text('${fmtNum(p['value'])} $unit'.trim()),
+            trailing: _gradeFor(p['period']) == null
+                ? null
+                : GradeBar(_gradeFor(p['period'])),
+          )
+      else
+        for (final m in _series.reversed)
+          ListTile(
+            dense: true,
+            title: Text(fmtDate(DateTime.parse(m['recorded_at']))),
+            // The notation as typed; the trailing number is what it parsed to.
+            subtitle: (m['note'] != null) ? Text(m['note']) : null,
+            trailing: Text('${fmtNum(m['value'])} $unit'.trim()),
+          ),
+    ];
+  }
+
+  Widget _historyEmpty() {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: kGapXl),
+      child: Column(
+        children: [
+          Icon(Icons.show_chart, size: 32, color: muted),
+          const SizedBox(height: kGapSm),
+          Text('Nothing logged yet',
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: kGapXs),
+          Text(
+              'Log a value above. Entries land here, and add up into the '
+              'quarter you can grade later.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+        ],
+      ),
     );
   }
 }
@@ -416,8 +585,7 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
   @override
   void initState() {
     super.initState();
-    _period =
-        Period.ofDate(DateTime.parse(widget.objective['start_date'])).id;
+    _period = Period.ofDate(DateTime.parse(widget.objective['start_date'])).id;
   }
 
   @override
@@ -471,6 +639,13 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
               Text('score ${fmtScore(k['score'] as double?)}',
                   style: theme.textTheme.bodySmall),
             ]),
+            if (_carriesOver(k))
+              Text(
+                  'renews starting at ${fmtNum(k['current'] as num?)} '
+                          '${k['unit'] ?? ''}'
+                      .trim(),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             Row(children: [
               Text('grade', style: theme.textTheme.labelSmall),
               Expanded(
@@ -496,6 +671,11 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
       ),
     );
   }
+
+  /// Whether renewing will seed this key result's next-quarter starting point
+  /// from its last entry — Value key results with something logged.
+  bool _carriesOver(Map<String, dynamic> k) =>
+      k['aggregation'] == 'LATEST' && k['current'] != null;
 
   Future<void> _saveGrades() async {
     final db = DBHelper();
@@ -597,4 +777,3 @@ class _HistoryTabState extends State<HistoryTab> {
     );
   }
 }
-

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:udi_streaks/okr/log_value.dart';
 import 'package:udi_streaks/ui/kit.dart';
 
 void main() {
@@ -30,5 +31,16 @@ void main() {
     expect(parseValue(''), isNull);
     expect(parseValue('abc'), isNull);
     expect(parseValue('3x'), isNull);
+  });
+
+  group('targetNotation', () {
+    test('shows the notation the user typed', () {
+      expect(targetNotation({'target_raw': '3x10'}), ' · 3x10');
+    });
+
+    test('is empty when the target was a plain number', () {
+      expect(targetNotation({'target_raw': null}), '');
+      expect(targetNotation(<String, dynamic>{}), '');
+    });
   });
 }

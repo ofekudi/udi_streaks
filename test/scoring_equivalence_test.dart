@@ -124,8 +124,8 @@ void main() {
       };
       final objective = hasObjective
           ? {
-              'start_date': DateTime(2026, 1 + rng.nextInt(6), 1)
-                  .toIso8601String(),
+              'start_date':
+                  DateTime(2026, 1 + rng.nextInt(6), 1).toIso8601String(),
               'end_date':
                   DateTime(2026, 7 + rng.nextInt(6), 28).toIso8601String(),
             }
@@ -165,6 +165,9 @@ void main() {
         end: nEnd,
         now: now,
       ).toMap();
+      // `previous` is a post-extraction addition; the original had no notion of
+      // it, so it isn't part of the equivalence.
+      actual.remove('previous');
 
       expect((nStart, nEnd), (oStart, oEnd), reason: 'window for $kr');
       expect(actual, expected, reason: 'computation for $kr with $values');

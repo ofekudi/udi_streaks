@@ -38,6 +38,17 @@ per-objective screen — entity actions live on long-press (`showActionSheet`),
 including adding a child ("Add objective" on an area, "Add key result" on an
 objective), so no row carries a permanent add affordance. `InlineAddField`
 survives only for "Add area", once, at the bottom of the list.
+
+An objective with **exactly one key result collapses into a single row**
+(`_mergedRow`) titled with the *key result* — the objective title and the KR
+title otherwise say the same thing twice over five rows. It's presentation only:
+the objective still exists, still rolls up, still gets graded at quarter close,
+and its long-press sheet carries both entities' actions. Adding a second key
+result unfolds it back into a chevron row with children, for free.
+Every row is at most two lines — title, then a `ScoreBar` — and the only number
+in the tree is a key result's `X / Y`, in a right-hand column beside both lines
+so the title keeps its own line. Objectives and areas show their rollup as the
+bar alone; `fmtScore` is only used by the quarter-close screen.
 Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
 `QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
 most-recently-logged-first capture list). Measurement writes go through
@@ -64,9 +75,21 @@ and don't recompute a rule inline in a widget.
 
 ## Schema
 
-Version 3, ten tables. `areas → objectives → key_results` is intent;
+Version 5, ten tables. `areas → objectives → key_results` is intent;
 `executions → measurements` is doing; `reviews` holds quarterly grades.
 `executions` and `trackables` exist but have no CRUD yet — leave them.
+`key_results.target_raw`, `key_results.baseline_raw` and `measurements.note`
+hold the notation the user typed ("3x10"); it's input, not a computed value —
+display it wherever a target, a starting point or an entry is *stated*, but
+every comparison runs on the parsed number.
+
+`key_results.baseline_value` is where a KR started. When set, `scoreFor`
+measures `(current - baseline) / (target - baseline)`, so `3x10 → 3x12` reads 0%
+at 3x10 instead of 83%, and the sign of `target - baseline` carries the
+direction (`wantsDown`) — the `direction` column only matters without a
+baseline. Offered on `LATEST` key results only: `SUM` and `COUNT` restart at
+zero each quarter by definition. `renewObjective` seeds the next quarter's
+baseline from the KR's last entry, so progressive goals need no rebuilding.
 New migrations go in `_onUpgrade` behind `if (oldVersion < N)`.
 
 ## Keeping this file current

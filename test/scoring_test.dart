@@ -86,6 +86,68 @@ void main() {
     });
   });
 
+  group('scoreFor with a baseline', () {
+    test('progress runs from the starting point, not from zero', () {
+      double? s(double current) =>
+          scoreFor(current: current, target: 36, baseline: 30, direction: 'UP');
+      expect(s(30), 0.0);
+      expect(s(33), 0.5);
+      expect(s(36), 1.0);
+    });
+
+    test('clamps a regression to 0 and an overshoot to 1', () {
+      double? s(double current) =>
+          scoreFor(current: current, target: 36, baseline: 30, direction: 'UP');
+      expect(s(24), 0.0);
+      expect(s(40), 1.0);
+    });
+
+    test('a target below the baseline counts down, whatever direction says',
+        () {
+      // 82kg -> 75kg, currently 80kg: 2 of the 7kg done.
+      expect(scoreFor(current: 80, target: 75, baseline: 82, direction: 'UP'),
+          closeTo(0.2857, 0.0001));
+    });
+
+    test('a target of 0 is a real destination when there is a baseline', () {
+      expect(
+          scoreFor(current: 2, target: 0, baseline: 5, direction: 'UP'), 0.6);
+      // Without one it still means "no target".
+      expect(scoreFor(current: 2, target: 0, direction: 'UP'), isNull);
+    });
+
+    test('nowhere to travel means no score', () {
+      expect(scoreFor(current: 30, target: 30, baseline: 30, direction: 'UP'),
+          isNull);
+      expect(scoreFor(current: null, target: 36, baseline: 30, direction: 'UP'),
+          isNull);
+    });
+  });
+
+  group('previousValue', () {
+    test('is the entry before the newest one, for LATEST only', () {
+      expect(previousValue([36, 30, 27], 'LATEST'), 30);
+      expect(previousValue([36], 'LATEST'), isNull);
+      expect(previousValue([], 'LATEST'), isNull);
+      expect(previousValue([36, 30], 'SUM'), isNull);
+      expect(previousValue([36, 30], 'COUNT'), isNull);
+    });
+  });
+
+  group('wantsDown', () {
+    test('a baseline above the target means lower is better', () {
+      expect(wantsDown(baseline: 82, target: 75, direction: 'UP'), isTrue);
+      expect(wantsDown(baseline: 30, target: 36, direction: 'DOWN'), isFalse);
+    });
+
+    test('falls back to direction without a usable baseline', () {
+      expect(wantsDown(direction: 'DOWN'), isTrue);
+      expect(wantsDown(direction: 'UP'), isFalse);
+      expect(wantsDown(baseline: 30, target: 30, direction: 'DOWN'), isTrue);
+      expect(wantsDown(baseline: 30, target: null, direction: 'DOWN'), isTrue);
+    });
+  });
+
   group('paceFor', () {
     test('bands sit at +0.05 and -0.1 around the elapsed fraction', () {
       expect(paceFor(score: 0.55, fractionElapsed: 0.5), 'ahead');
@@ -108,7 +170,8 @@ void main() {
 
   group('resolveWindow', () {
     test('ROLLING looks back the configured number of days', () {
-      final (start, end) = resolveWindow(mode: 'ROLLING', windowDays: 30, now: now);
+      final (start, end) =
+          resolveWindow(mode: 'ROLLING', windowDays: 30, now: now);
       expect(end, now);
       expect(start, now.subtract(const Duration(days: 30)));
     });

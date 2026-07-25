@@ -96,9 +96,8 @@ class _RecordScreenState extends State<RecordScreen> {
   Future<void> _load() async {
     final krs = await DBHelper().getAllKeyResultsWithProgress();
     if (!mounted) return;
-    final ordered = _order == null
-        ? byRecency(krs)
-        : inStoredOrder(krs, _order!);
+    final ordered =
+        _order == null ? byRecency(krs) : inStoredOrder(krs, _order!);
     setState(() {
       _order ??= [for (final k in ordered) k['id'] as String];
       _krs = ordered;
@@ -110,10 +109,14 @@ class _RecordScreenState extends State<RecordScreen> {
 
   String _valueLine(Map<String, dynamic> k) {
     final unit = k['unit'] ?? '';
+    // Nothing logged reads as 0, not "–".
+    final current = fmtNum((k['current'] as num?) ?? 0);
     if (k['target'] != null) {
-      return '${fmtNum(k['current'])} / ${fmtNum(k['target'])} $unit'.trim();
+      return '$current / ${fmtNum(k['target'])} $unit'
+              '${targetNotation(k)}'
+          .trim();
     }
-    return '${fmtNum(k['current'])} $unit'.trim();
+    return '$current $unit'.trim();
   }
 
   /// Value plus its objective — the context a flat list would otherwise lose.
@@ -131,8 +134,8 @@ class _RecordScreenState extends State<RecordScreen> {
     final raw = _entry.text.trim();
     if (!await logKrValue(k, raw)) {
       if (raw.isNotEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text(kLogValueHelp)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text(kLogValueHelp)));
       }
       return;
     }
@@ -157,8 +160,8 @@ class _RecordScreenState extends State<RecordScreen> {
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      kGapMd, kGapSm, kGapMd, kGapSm),
+                  padding:
+                      const EdgeInsets.fromLTRB(kGapMd, kGapSm, kGapMd, kGapSm),
                   child: TextField(
                     controller: _search,
                     onChanged: (v) => setState(() => _query = v),
@@ -182,8 +185,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
                 Expanded(
                   child: _krs.isEmpty
-                      ? _empty(
-                          'Nothing to log yet.\nAdd a key result under an '
+                      ? _empty('Nothing to log yet.\nAdd a key result under an '
                           'objective first.')
                       : visible.isEmpty
                           ? _empty('No key result matches "$_query".')
@@ -219,8 +221,8 @@ class _RecordScreenState extends State<RecordScreen> {
                   .textTheme
                   .bodyMedium
                   ?.copyWith(fontWeight: FontWeight.w600)),
-          subtitle: Text(_subtitle(k),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle:
+              Text(_subtitle(k), maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: _isCount(k)
               ? IconButton.filledTonal(
                   tooltip: '+1',

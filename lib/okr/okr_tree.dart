@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
+import 'log_value.dart';
 import 'okr_screens.dart';
 import 'period.dart';
 import 'record_screen.dart';
@@ -159,8 +160,10 @@ class _GoalsTabState extends State<GoalsTab> {
       child: Text(
         'Start with an area — a part of your life you want to track '
         '(Training, Reading, Body). Objectives and key results go under it.',
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );
   }
@@ -195,7 +198,6 @@ class _GoalsTabState extends State<GoalsTab> {
   /// A quiet uppercase label, not a row you can enter. Long-press is the menu.
   Widget _areaHeading(Map<String, dynamic> a) {
     final theme = Theme.of(context);
-    final score = a['score'] as double?;
     final muted = theme.colorScheme.onSurfaceVariant;
     return InkWell(
       onLongPress: () => _areaMenu(a),
@@ -215,10 +217,6 @@ class _GoalsTabState extends State<GoalsTab> {
                 ),
               ),
             ),
-            if (score != null)
-              Text(fmtScore(score),
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(fontWeight: FontWeight.w800, color: muted)),
           ],
         ),
       ),
@@ -268,7 +266,8 @@ class _GoalsTabState extends State<GoalsTab> {
   }
 
   Future<void> _addObjective(Map<String, dynamic> a) async {
-    final title = await promptText(context, title: 'New objective', initial: '');
+    final title =
+        await promptText(context, title: 'New objective', initial: '');
     if (title == null || title.isEmpty) return;
     final p = Period.current();
     await DBHelper().insertObjective(
@@ -309,6 +308,10 @@ class _GoalsTabState extends State<GoalsTab> {
   // ---------- Objectives ----------
 
   List<Widget> _objectiveSection(Map<String, dynamic> o) {
+    final krs = (o['key_results'] as List).cast<Map<String, dynamic>>();
+    // Presentation only: the objective still exists and still gets graded, and
+    // a second key result unfolds it back into a parent with children.
+    if (krs.length == 1) return [_mergedRow(o, krs.single)];
     final open = _isExpanded(o['id'] as String);
     return [
       _objectiveRow(o, open),
@@ -364,10 +367,7 @@ class _GoalsTabState extends State<GoalsTab> {
                               ? theme.colorScheme.onSurfaceVariant
                               : null,
                         )),
-                    if (archived)
-                      Text('archived',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant)),
+                    if (archived) _archivedLabel(),
                     if (score != null) ...[
                       const SizedBox(height: kGapXs),
                       ScoreBar(score),
@@ -375,26 +375,90 @@ class _GoalsTabState extends State<GoalsTab> {
                   ],
                 ),
               ),
-              const SizedBox(width: kGapSm),
-              // Fixed width so the numbers line up down the column.
-              SizedBox(
-                width: 34,
-                child: Text(
-                  fmtScore(score),
-                  textAlign: TextAlign.right,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: score == null
-                        ? theme.colorScheme.onSurfaceVariant
-                        : null,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// An objective with exactly one key result, as one row: the KR's title, its
+  /// value and its bar. No chevron — there is nothing left to expand.
+  Widget _mergedRow(Map<String, dynamic> o, Map<String, dynamic> k) {
+    final theme = Theme.of(context);
+    final score = k['score'] as double?;
+    final archived = o['status'] == 'archived';
+    return InkWell(
+      onTap: () => _openKr(k),
+      onLongPress: () => _mergedMenu(o, k),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kTapTarget),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(kGapXs, kGapSm, kGapXs, kGapSm),
+          child: Row(
+            children: [
+              // Empty chevron slot, so titles line up with expandable ones.
+              const SizedBox(width: 24 + kGapXs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(k['title'],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: archived
+                              ? theme.colorScheme.onSurfaceVariant
+                              : null,
+                        )),
+                    if (archived) _archivedLabel(),
+                    if (k['target'] != null) ...[
+                      const SizedBox(height: kGapXs),
+                      ScoreBar(score ?? 0, down: krWantsDown(k)),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: kGapSm),
+              _valueCell(k),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _archivedLabel() => Text('archived',
+      style: Theme.of(context)
+          .textTheme
+          .labelSmall
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant));
+
+  /// Both entities' actions in one sheet, since the row stands for both.
+  void _mergedMenu(Map<String, dynamic> o, Map<String, dynamic> k) {
+    showActionSheet(context, title: k['title'], actions: [
+      SheetAction(
+          icon: Icons.edit_outlined,
+          label: 'Edit key result',
+          onTap: () => _editKr(k)),
+      SheetAction(
+          icon: Icons.add, label: 'Add key result', onTap: () => _addKr(o)),
+      SheetAction(
+          icon: Icons.drive_file_rename_outline,
+          label: 'Rename objective',
+          onTap: () => _renameObjective(o)),
+      SheetAction(
+          icon: Icons.flag_outlined,
+          label: 'Close quarter · grade + renew',
+          onTap: () => _closeQuarter(o)),
+      SheetAction(
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          destructive: true,
+          onTap: () => _confirmDeleteObjective(o)),
+    ]);
   }
 
   void _objectiveMenu(Map<String, dynamic> o) {
@@ -476,47 +540,75 @@ class _GoalsTabState extends State<GoalsTab> {
     );
   }
 
+  /// Two lines — title, then the bar — with the value in the right-hand column
+  /// beside both, so the title has its line to itself.
   Widget _krRow(Map<String, dynamic> k) {
     final theme = Theme.of(context);
     final score = k['score'] as double?;
-    final target = k['target'];
-    final unit = k['unit'] ?? '';
-    final valueLine = target != null
-        ? '${fmtNum(k['current'])} / ${fmtNum(target)} $unit'
-        : '${fmtNum(k['current'])} $unit · no target';
     return InkWell(
       onTap: () => _openKr(k),
       onLongPress: () => _krMenu(k),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: kTapTarget),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: kGapSm),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
+          padding: const EdgeInsets.fromLTRB(0, kGapSm, kGapXs, kGapSm),
+          child: Row(
             children: [
-              Text(k['title'],
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 2),
-              Row(children: [
-                Expanded(
-                  child: Text(valueLine.trim(),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(k['title'],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    if (k['target'] != null) ...[
+                      const SizedBox(height: kGapXs),
+                      ScoreBar(score ?? 0, down: krWantsDown(k)),
+                    ],
+                  ],
                 ),
-                PacePill(k['on_pace']),
-              ]),
-              if (score != null) ...[
-                const SizedBox(height: kGapXs),
-                ScoreBar(score, down: k['direction'] == 'DOWN'),
-              ],
+              ),
+              const SizedBox(width: kGapSm),
+              _valueCell(k),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// `12 / 30 reps · 3x10`, or just the current value when the KR is track-only.
+  /// Scales down rather than wrapping.
+  Widget _valueCell(Map<String, dynamic> k) {
+    final theme = Theme.of(context);
+    final unit = k['unit'] ?? '';
+    final target = k['target'];
+    // Nothing logged reads as 0, not "–".
+    final current = fmtNum((k['current'] as num?) ?? 0);
+    final text = target != null
+        ? '$current / ${fmtNum(target)} $unit${targetNotation(k)}'
+        : '$current $unit';
+    final delta = krDelta(k);
+    return ConstrainedBox(
+      // Fits "30 / 500 reps · 3x10"; longer text scales down.
+      constraints: const BoxConstraints(maxWidth: 140),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(text.trim(),
+                maxLines: 1,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+          ),
+          if (delta != null) DeltaText(delta, down: krWantsDown(k)),
+        ],
       ),
     );
   }
