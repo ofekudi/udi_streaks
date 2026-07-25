@@ -3,6 +3,7 @@ import 'db_helper.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/foundation.dart' as foundation;
 import 'package:home_widget/home_widget.dart';
+import 'okr/okr_screens.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +37,50 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Never Miss Twice'),
+      home: const RootNav(),
+    );
+  }
+}
+
+/// Bottom-nav shell. Habits is the home tab (highest-frequency capture),
+/// then Goals (intent + progress) and History (over time).
+class RootNav extends StatefulWidget {
+  const RootNav({super.key});
+  @override
+  State<RootNav> createState() => _RootNavState();
+}
+
+class _RootNavState extends State<RootNav> {
+  int _index = 0;
+
+  final _tabs = const [
+    MyHomePage(title: 'Never Miss Twice'),
+    GoalsTab(),
+    HistoryTab(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _index, children: _tabs),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.check_circle_outline),
+              selectedIcon: Icon(Icons.check_circle),
+              label: 'Habits'),
+          NavigationDestination(
+              icon: Icon(Icons.track_changes_outlined),
+              selectedIcon: Icon(Icons.track_changes),
+              label: 'OKR'),
+          NavigationDestination(
+              icon: Icon(Icons.timeline_outlined),
+              selectedIcon: Icon(Icons.timeline),
+              label: 'History'),
+        ],
+      ),
     );
   }
 }
@@ -922,6 +966,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
               },
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'habits_fab',
         onPressed: _incrementCounter,
         tooltip: 'Add Habit',
         child: const Icon(Icons.add),
