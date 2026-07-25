@@ -100,6 +100,9 @@ bool wantsDown({
 /// sign of `target - baseline` carries the direction, so [direction] is unused
 /// in that case, and a target of 0 is a valid destination.
 ///
+/// A baseline is also a known state, so a KR with nothing logged yet scores 0
+/// rather than nothing at all.
+///
 /// Without a baseline, an `UP` key result is `current / target` and a `DOWN` one
 /// inverts the ratio.
 double? scoreFor({
@@ -108,12 +111,13 @@ double? scoreFor({
   required String direction,
   double? baseline,
 }) {
-  if (target == null || current == null) return null;
+  if (target == null) return null;
   if (baseline != null) {
     if (target == baseline) return null;
-    return ((current - baseline) / (target - baseline)).clamp(0.0, 1.0);
+    final at = current ?? baseline;
+    return ((at - baseline) / (target - baseline)).clamp(0.0, 1.0);
   }
-  if (target == 0) return null;
+  if (current == null || target == 0) return null;
   final raw = direction == 'DOWN'
       ? (current <= 0 ? 1.0 : target / current)
       : current / target;

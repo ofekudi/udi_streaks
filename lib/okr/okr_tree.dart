@@ -580,17 +580,15 @@ class _GoalsTabState extends State<GoalsTab> {
     );
   }
 
-  /// `12 / 30 reps · 3x10`, or just the current value when the KR is track-only.
-  /// Scales down rather than wrapping.
+  /// `3x10 / 3x12 reps`, or just the current value when the KR is track-only.
+  /// Both sides read as the notation that was typed. Scales down rather than
+  /// wrapping.
   Widget _valueCell(Map<String, dynamic> k) {
     final theme = Theme.of(context);
     final unit = k['unit'] ?? '';
-    final target = k['target'];
-    // Nothing logged reads as 0, not "–".
-    final current = fmtNum((k['current'] as num?) ?? 0);
-    final text = target != null
-        ? '$current / ${fmtNum(target)} $unit${targetNotation(k)}'
-        : '$current $unit';
+    final text = k['target'] != null
+        ? '${currentLabel(k)} / ${targetLabel(k)} $unit'
+        : '${currentLabel(k)} $unit';
     final delta = krDelta(k);
     return ConstrainedBox(
       // Fits "30 / 500 reps · 3x10"; longer text scales down.

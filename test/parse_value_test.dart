@@ -33,14 +33,31 @@ void main() {
     expect(parseValue('3x'), isNull);
   });
 
-  group('targetNotation', () {
-    test('shows the notation the user typed', () {
-      expect(targetNotation({'target_raw': '3x10'}), ' · 3x10');
+  group('targetLabel', () {
+    test('is the notation the user typed when we kept it', () {
+      expect(targetLabel({'target_raw': '3x12', 'target': 36}), '3x12');
     });
 
-    test('is empty when the target was a plain number', () {
-      expect(targetNotation({'target_raw': null}), '');
-      expect(targetNotation(<String, dynamic>{}), '');
+    test('falls back to the parsed number', () {
+      expect(targetLabel({'target_raw': null, 'target': 36}), '36');
+      expect(targetLabel(<String, dynamic>{}), '–');
+    });
+  });
+
+  group('currentLabel', () {
+    test('is the newest entry as it was typed', () {
+      expect(currentLabel({'current_raw': '3x11', 'current': 33}), '3x11');
+      expect(currentLabel({'current': 33}), '33');
+    });
+
+    test('with nothing logged it reads as the starting point', () {
+      expect(
+          currentLabel({'baseline_raw': '3x10', 'baseline_value': 30}), '3x10');
+      expect(currentLabel({'baseline_value': 30}), '30');
+    });
+
+    test('and as 0 when there is no starting point either', () {
+      expect(currentLabel(<String, dynamic>{}), '0');
     });
   });
 }

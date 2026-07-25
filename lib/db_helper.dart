@@ -1018,7 +1018,7 @@ class DBHelper {
     );
 
     final rows = await db.query('measurements',
-        columns: ['value'],
+        columns: ['value', 'note'],
         where: 'key_result_id = ? AND recorded_at >= ? AND recorded_at <= ?',
         whereArgs: [
           kr['id'],
@@ -1039,7 +1039,14 @@ class DBHelper {
       ],
       start: start,
       end: end,
-    ).toMap();
+    ).toMap()
+      ..addAll({
+        // The newest entry's notation ("3x11"), for display. An aggregate of
+        // several entries has no notation of its own.
+        'current_raw': kr['aggregation'] == 'LATEST' && rows.isNotEmpty
+            ? rows.first['note']
+            : null,
+      });
   }
 
   // ---------- Logging (executions + measurements) ----------

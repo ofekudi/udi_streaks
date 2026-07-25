@@ -25,11 +25,21 @@ Future<bool> logKrValue(Map<String, dynamic> kr, String raw) async {
   return true;
 }
 
-/// [kr]'s `target_raw` as a ` · 3x10` suffix, empty when it's null. Display
-/// only — scoring runs on the parsed `target_value`.
-String targetNotation(Map<String, dynamic> kr) {
-  final raw = kr['target_raw'] as String?;
-  return raw == null ? '' : ' · $raw';
+/// The target as the user wrote it — `3x12` when the notation was kept, else the
+/// parsed number. Display only; scoring runs on `target_value`.
+String targetLabel(Map<String, dynamic> kr) =>
+    (kr['target_raw'] as String?) ?? fmtNum(kr['target'] as num?);
+
+/// Where the key result stands, as the user wrote it: the newest entry's
+/// notation (`3x11`), else its number. With nothing logged it reads as the
+/// starting point, which is what the baseline asserts, or 0 without one.
+String currentLabel(Map<String, dynamic> kr) {
+  final raw = kr['current_raw'] as String?;
+  if (raw != null) return raw;
+  final current = kr['current'] as num?;
+  if (current != null) return fmtNum(current);
+  final baseline = baselineLabel(kr);
+  return baseline.isEmpty ? '0' : baseline;
 }
 
 /// [kr]'s `baseline_raw` or the parsed `baseline_value`, empty when it has no

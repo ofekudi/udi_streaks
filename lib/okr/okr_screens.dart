@@ -57,6 +57,9 @@ class _KrEditScreenState extends State<KrEditScreen> {
     super.dispose();
   }
 
+  String get _aggExplainer =>
+      kAggregations.firstWhere((a) => a.value == _agg).explainer;
+
   /// A single toggle button showing ↑ / ↓ — "higher is better" vs "lower is
   /// better". Tapping flips it.
   Widget _directionToggle() {
@@ -106,30 +109,49 @@ class _KrEditScreenState extends State<KrEditScreen> {
             decoration: const InputDecoration(labelText: 'Title'),
           ),
           const SizedBox(height: kGapXl),
-          const SectionHeader('How do you want to measure it?'),
-          // RadioListTile's own groupValue/onChanged are deprecated.
-          RadioGroup<String>(
-            groupValue: _agg,
-            onChanged: (v) => setState(() => _agg = v!),
-            child: Column(
-              children: [
-                for (final a in kAggregations)
-                  RadioListTile<String>(
-                    value: a.value,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: Text(a.label,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600)),
-                    subtitle: Text(a.explainer,
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ),
-              ],
+          DropdownButtonFormField<String>(
+            initialValue: _agg,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'How do you measure it?',
+              helperText: _aggExplainer,
             ),
+            items: [
+              for (final a in kAggregations)
+                DropdownMenuItem(
+                  value: a.value,
+                  child: Text(a.label,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                ),
+            ],
+            onChanged: (v) => setState(() => _agg = v!),
           ),
-          const SizedBox(height: kGapMd),
+          // A baseline only makes sense for a level you're moving. Total and
+          // Count start at zero every quarter by definition.
+          if (_agg == 'LATEST') ...[
+            const SizedBox(height: kGapLg),
+            const SectionHeader('Baseline'),
+            TextField(
+              controller: _baseline,
+              keyboardType: TextInputType.text,
+              autocorrect: false,
+              enableSuggestions: false,
+              onChanged: (_) {
+                if (_baselineError != null) {
+                  setState(() => _baselineError = null);
+                }
+              },
+              decoration: InputDecoration(
+                hintText: 'e.g. 3x10 — where you are today',
+                errorText: _baselineError,
+              ),
+            ),
+          ],
+          const SizedBox(height: kGapLg),
+          const SectionHeader('Target'),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -153,8 +175,7 @@ class _KrEditScreenState extends State<KrEditScreen> {
                     }
                   },
                   decoration: InputDecoration(
-                    labelText: 'Target',
-                    hintText: 'e.g. 30, 3x10',
+                    hintText: 'e.g. 3x12',
                     errorText: _targetError,
                   ),
                 ),
@@ -174,38 +195,6 @@ class _KrEditScreenState extends State<KrEditScreen> {
               ],
             ],
           ),
-          // A starting point only makes sense for a level you're moving. Total
-          // and Count start at zero every quarter by definition.
-          if (_agg == 'LATEST') ...[
-            const SizedBox(height: kGapMd),
-            TextField(
-              controller: _baseline,
-              keyboardType: TextInputType.text,
-              autocorrect: false,
-              enableSuggestions: false,
-              onChanged: (_) {
-                if (_baselineError != null) {
-                  setState(() => _baselineError = null);
-                }
-              },
-              decoration: InputDecoration(
-                labelText: 'Starting at',
-                hintText: 'e.g. 3x10 — where you are today',
-                errorText: _baselineError,
-              ),
-            ),
-            const SizedBox(height: kGapSm),
-            Text(
-                'With a starting point, progress runs from there to the target: '
-                '3x10 → 3x12 reads 0% at 3x10, not 83%.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ],
-          const SizedBox(height: kGapSm),
-          Text(
-              'Leave the target empty to just track it over time — no goal, just the trend.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: kGapXl),
         ],
       ),
@@ -447,9 +436,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  // Nothing logged reads as 0, not "–".
-                  child: Text(
-                      '${fmtNum((kr['current'] as num?) ?? 0)} $unit'.trim(),
+                  child: Text('${currentLabel(kr)} $unit'.trim(),
                       style: theme.textTheme.headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w800)),
                 ),
@@ -482,7 +469,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
   /// "lower is better" note only appears without one.
   String _goalLine() {
     final unit = kr['unit'] ?? '';
-    final target = '${fmtNum(kr['target'])} $unit${targetNotation(kr)}'.trim();
+    final target = '${targetLabel(kr)} $unit'.trim();
     final from = baselineLabel(kr);
     if (from.isNotEmpty) return 'from $from → $target';
     final down = kr['direction'] == 'DOWN';

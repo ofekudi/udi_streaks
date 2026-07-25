@@ -109,14 +109,10 @@ class _RecordScreenState extends State<RecordScreen> {
 
   String _valueLine(Map<String, dynamic> k) {
     final unit = k['unit'] ?? '';
-    // Nothing logged reads as 0, not "–".
-    final current = fmtNum((k['current'] as num?) ?? 0);
     if (k['target'] != null) {
-      return '$current / ${fmtNum(k['target'])} $unit'
-              '${targetNotation(k)}'
-          .trim();
+      return '${currentLabel(k)} / ${targetLabel(k)} $unit'.trim();
     }
-    return '$current $unit'.trim();
+    return '${currentLabel(k)} $unit'.trim();
   }
 
   /// Value plus its objective — the context a flat list would otherwise lose.

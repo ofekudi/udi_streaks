@@ -116,10 +116,15 @@ void main() {
       expect(scoreFor(current: 2, target: 0, direction: 'UP'), isNull);
     });
 
+    test('nothing logged yet sits at the starting point, not unscored', () {
+      expect(scoreFor(current: null, target: 36, baseline: 30, direction: 'UP'),
+          0.0);
+    });
+
     test('nowhere to travel means no score', () {
       expect(scoreFor(current: 30, target: 30, baseline: 30, direction: 'UP'),
           isNull);
-      expect(scoreFor(current: null, target: 36, baseline: 30, direction: 'UP'),
+      expect(scoreFor(current: 30, target: null, baseline: 30, direction: 'UP'),
           isNull);
     });
   });

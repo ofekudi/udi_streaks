@@ -81,7 +81,10 @@ Version 5, ten tables. `areas → objectives → key_results` is intent;
 `key_results.target_raw`, `key_results.baseline_raw` and `measurements.note`
 hold the notation the user typed ("3x10"); it's input, not a computed value —
 display it wherever a target, a starting point or an entry is *stated*, but
-every comparison runs on the parsed number.
+every comparison runs on the parsed number. `currentLabel` / `targetLabel` in
+`okr/log_value.dart` are how rows render it, so `3x10 / 3x12 reps` is what the
+tree shows; with nothing logged `currentLabel` reads as the baseline, because
+that is where the key result stands.
 
 `key_results.baseline_value` is where a KR started. When set, `scoreFor`
 measures `(current - baseline) / (target - baseline)`, so `3x10 → 3x12` reads 0%
