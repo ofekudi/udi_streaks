@@ -454,8 +454,8 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
             children: [
               Expanded(
                 child: Text(period.label,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w800, color: muted)),
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w800, color: muted)),
               ),
               if (total != null)
                 Text('${fmtNum(total)} $unit'.trim(),
@@ -476,24 +476,57 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
   }
 
   /// One entry: the day it was logged, and what was logged in the notation it
-  /// was typed in.
+  /// was typed in. Long-press to delete it, as every other row in the app does.
   Widget _entryRow(Map<String, dynamic> m, String unit) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: kGapSm, horizontal: kGapXs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(fmtDate(DateTime.parse(m['recorded_at'] as String)),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8))),
+    return InkWell(
+      onLongPress: () => _entryMenu(m, unit),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kTapTarget),
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(vertical: kGapSm, horizontal: kGapXs),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(fmtDate(DateTime.parse(m['recorded_at'] as String)),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.8))),
+              ),
+              Text('${entryLabel(m)} $unit'.trim(),
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+            ],
           ),
-          Text('${entryLabel(m)} $unit'.trim(),
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-        ],
+        ),
       ),
     );
+  }
+
+  void _entryMenu(Map<String, dynamic> m, String unit) {
+    final at = fmtDate(DateTime.parse(m['recorded_at'] as String));
+    // An entry a habit produced can't go without the tick that made it, so the
+    // label says so rather than a dialog asking afterwards.
+    final fromHabit = m['habit_completion_id'] != null;
+    showActionSheet(
+      context,
+      title: '$at · ${entryLabel(m)} $unit'.trim(),
+      actions: [
+        SheetAction(
+          icon: Icons.delete_outline,
+          label:
+              fromHabit ? 'Delete entry and un-tick the habit' : 'Delete entry',
+          destructive: true,
+          onTap: () => _deleteEntry(m),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteEntry(Map<String, dynamic> m) async {
+    await DBHelper().deleteMeasurement(m['id'] as String);
+    await _load();
   }
 
   /// The quarter's folded value, from the same summaries the by-quarter list
@@ -554,17 +587,7 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
       body: ListView(
         padding: kFormPadding,
         children: [
-          Text('Grade each key result 1–10 (your own view).',
-              style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.7))),
-          const SizedBox(height: kGapMd),
           for (final k in widget.krs) _gradeRow(k),
-          const SizedBox(height: kGapSm),
-          Text('Grades save to history · reflection stays in your pen ✍️',
-              style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: kGapXl),
           FilledButton(
             onPressed: _saveAndRenew,
@@ -705,9 +728,7 @@ class _HistoryTabState extends State<HistoryTab> {
               ? const Center(
                   child: Padding(
                   padding: EdgeInsets.all(kGapXl),
-                  child: Text(
-                      'Nothing to show yet.\nAdd key results, then tap one to see it over time.',
-                      textAlign: TextAlign.center),
+                  child: Text('Nothing to show yet'),
                 ))
               : RefreshIndicator(
                   onRefresh: _load,

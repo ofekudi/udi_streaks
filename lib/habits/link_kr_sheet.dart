@@ -45,9 +45,10 @@ class _Empty extends StatelessWidget {
         children: [
           Icon(Icons.link_off, size: 40, color: scheme.outline),
           const SizedBox(height: kGapMd),
+          // States the constraint, which is the part that can't be seen: an
+          // empty sheet otherwise reads as broken.
           Text(
-            'No key result to link to yet.\nAdd a COUNT key result to an '
-            'active objective in the OKR tab first.',
+            'No Count key result on an active objective',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurface.withValues(alpha: 0.7),

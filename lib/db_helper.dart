@@ -1191,6 +1191,33 @@ class DBHelper {
     await logMeasurement(keyResultId: keyResultId, value: by);
   }
 
+  /// Removes one logged entry — a mistyped value, or a tap that shouldn't have
+  /// happened.
+  ///
+  /// An entry a habit produced is deleted by deleting that completion, which
+  /// cascades to this row: the count exists *because* the habit was ticked, so
+  /// dropping one without the other would leave the habit ticked for a day it no
+  /// longer counts for. Returns whether a habit completion went with it, so the
+  /// caller can say so.
+  Future<bool> deleteMeasurement(String id) async {
+    final db = await database;
+    final rows = await db.query('measurements',
+        columns: ['habit_completion_id'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1);
+    if (rows.isEmpty) return false;
+
+    final completionId = rows.first['habit_completion_id'] as String?;
+    if (completionId != null) {
+      await db.delete('habit_completions',
+          where: 'id = ?', whereArgs: [completionId]);
+      return true;
+    }
+    await db.delete('measurements', where: 'id = ?', whereArgs: [id]);
+    return false;
+  }
+
   // ---------- History ----------
 
   Future<List<Map<String, dynamic>>> getMeasurementSeries({

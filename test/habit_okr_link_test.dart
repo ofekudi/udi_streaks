@@ -223,6 +223,48 @@ void main() {
     });
   });
 
+  group('deleting one entry', () {
+    Future<List<Map<String, dynamic>>> entries(String krId) =>
+        db.getMeasurementSeries(keyResultId: krId);
+
+    test('a hand-logged entry just goes', () async {
+      final krId = await newKr(aggregation: 'SUM', target: 100);
+      await db.logMeasurement(keyResultId: krId, value: 10);
+      await db.logMeasurement(keyResultId: krId, value: 5);
+
+      final fromHabit = await db
+          .deleteMeasurement((await entries(krId)).first['id'] as String);
+
+      expect(fromHabit, isFalse);
+      expect(await current(krId), 5);
+    });
+
+    test('a habit-fed entry takes the tick with it', () async {
+      final habitId = await db.insertHabit('Me Morning Time');
+      final krId = await newKr();
+      await db.linkHabitToKeyResult(habitId, krId);
+      await db.toggleHabitCompletion(habitId);
+      expect((await db.getHabits()).single['completed_today'], isTrue);
+
+      final fromHabit = await db
+          .deleteMeasurement((await entries(krId)).single['id'] as String);
+
+      // The count existed because the habit was ticked; leaving the tick behind
+      // would claim a day that no longer counts.
+      expect(fromHabit, isTrue);
+      expect(await current(krId), 0);
+      expect((await db.getHabits()).single['completed_today'], isFalse);
+    });
+
+    test('deleting an entry that is already gone is a no-op', () async {
+      final krId = await newKr(aggregation: 'SUM', target: 100);
+      await db.logMeasurement(keyResultId: krId, value: 10);
+
+      expect(await db.deleteMeasurement('not-an-id'), isFalse);
+      expect(await current(krId), 10);
+    });
+  });
+
   group('deletion', () {
     test('deleting the habit removes its counts and the link', () async {
       final habitId = await db.insertHabit('Me Morning Time');

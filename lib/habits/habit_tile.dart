@@ -174,7 +174,7 @@ class HabitTile extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(right: kGapSm),
               child: const Tooltip(
-                message: 'Complete today or your streak will reset tomorrow!',
+                message: 'Streak resets tomorrow',
                 child: Icon(Icons.warning_amber_rounded,
                     color: kSkippedColor, size: 22),
               ),

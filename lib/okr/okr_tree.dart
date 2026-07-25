@@ -128,7 +128,6 @@ class _GoalsTabState extends State<GoalsTab> {
               child: ListView(
                 padding: kListPadding,
                 children: [
-                  if (_areas.isEmpty) _emptyState(),
                   for (final a in _areas) ..._areaSection(a),
                   const SizedBox(height: kGapMd),
                   InlineAddField(
@@ -155,20 +154,6 @@ class _GoalsTabState extends State<GoalsTab> {
     _load();
   }
 
-  Widget _emptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: kGapLg),
-      child: Text(
-        'Start with an area — a part of your life you want to track '
-        '(Training, Reading, Body). Objectives and key results go under it.',
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-      ),
-    );
-  }
-
   // ---------- Areas ----------
 
   List<Widget> _areaSection(Map<String, dynamic> a) {
@@ -179,8 +164,8 @@ class _GoalsTabState extends State<GoalsTab> {
       // once the whole tree is on one screen. Adding lives on long-press, and
       // the empty state is what teaches it.
       if (objectives.isEmpty)
-        _hint('No objectives yet — long-press the area to add one.',
-            indent: kGapXl),
+        // The gesture is the one thing here that can't be seen.
+        _hint('Long-press to add an objective', indent: kGapXl),
       for (final o in objectives) ..._objectiveSection(o),
     ];
   }

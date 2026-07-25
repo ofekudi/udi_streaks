@@ -73,6 +73,13 @@ and writes it with `logKrValue`. The FAB is the only logging affordance here —
 the old inline form is gone — but both surfaces still go through
 `okr/log_value.dart`, which is what keeps them from drifting.
 
+Long-pressing an entry deletes it, the same `showActionSheet` idiom as every
+other row. `deleteMeasurement` is the only way a measurement is removed
+deliberately, and an entry a habit produced is removed by deleting *that
+completion* so the cascade takes the count — the tick and the count are one fact,
+and the sheet's label says the habit gets un-ticked rather than reporting it
+after. It returns whether a completion went with it.
+
 A habit can **feed a COUNT key result**: ticking the habit also counts there.
 The link is offered on the habit side only — `habit_detail_sheet.dart` gains
 "Link to OKR" / "Unlink from …" and `habits/link_kr_sheet.dart` is the picker.

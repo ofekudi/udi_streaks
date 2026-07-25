@@ -181,8 +181,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
                 Expanded(
                   child: _krs.isEmpty
-                      ? _empty('Nothing to log yet.\nAdd a key result under an '
-                          'objective first.')
+                      ? _empty('No key results yet')
                       : visible.isEmpty
                           ? _empty('No key result matches "$_query".')
                           : ListView(

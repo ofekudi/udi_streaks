@@ -152,7 +152,7 @@ class _HabitsScreenState extends State<HabitsScreen>
       ),
       body: _habits.isEmpty
           ? const Center(
-              child: Text('No habits yet. Add one by tapping the + button!'),
+              child: Text('No habits yet'),
             )
           : ListView.separated(
               itemCount: _habits.length,
