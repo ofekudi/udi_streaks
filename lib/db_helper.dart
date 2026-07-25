@@ -1,7 +1,11 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
+import 'core/dates.dart';
+import 'habits/streak_rules.dart';
 import 'okr/period.dart';
+import 'okr/rollup.dart';
+import 'okr/scoring.dart';
 
 class DBHelper {
   static final DBHelper _instance = DBHelper._internal();
@@ -229,9 +233,7 @@ class DBHelper {
     final List<Map<String, dynamic>> habits =
         await db.query('habits', orderBy: 'created_at DESC');
 
-    // Get today's date at midnight for comparison
-    final today = DateTime.now().copyWith(
-        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+    final today = todayStart();
 
     // Create a new list with mutable maps
     final List<Map<String, dynamic>> mutableHabits = [];
@@ -283,8 +285,7 @@ class DBHelper {
 
   Future<void> toggleHabitCompletion(String habitId) async {
     final Database db = await database;
-    final today = DateTime.now().copyWith(
-        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+    final today = todayStart();
 
     // Check if habit was already completed today
     final completion = await db.query(
@@ -322,125 +323,21 @@ class DBHelper {
     );
   }
 
+  /// Derived streak state for a habit. The rule itself lives in
+  /// `habits/streak_rules.dart` so it can be tested without a database.
   Future<Map<String, dynamic>> getHabitStreaks(String habitId) async {
     final Database db = await database;
     final completions = await db.query(
       'habit_completions',
+      columns: ['completed_at'],
       where: 'habit_id = ?',
       whereArgs: [habitId],
       orderBy: 'completed_at DESC',
     );
 
-    if (completions.isEmpty) {
-      return {
-        'current_streak': 0,
-        'longest_streak': 0,
-        'streak_at_risk': false,
-        'streak_start_date': null,
-        'negative_streak': 0
-      };
-    }
-
-    int currentStreak = 0;
-    int longestStreak = 0;
-    int currentCount = 0;
-    DateTime? lastDate;
-    bool streakAtRisk = false;
-    DateTime? streakStartDate;
-    int negativeStreak = 0;
-
-    // Get today's date at midnight for comparison
-    final today = DateTime.now().copyWith(
-        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
-
-    // Check if the most recent completion is from today or earlier
-    final mostRecentCompletion =
-        DateTime.parse(completions.first['completed_at'] as String);
-    final mostRecentCompletionDate = DateTime(mostRecentCompletion.year,
-        mostRecentCompletion.month, mostRecentCompletion.day);
-    final todayDate = DateTime(today.year, today.month, today.day);
-    final daysSinceLastCompletion =
-        todayDate.difference(mostRecentCompletionDate).inDays;
-
-    // Calculate negative streak if more than 3 days have passed
-    if (daysSinceLastCompletion >= 3) {
-      currentStreak = 0;
-      streakAtRisk = false;
-      streakStartDate = null;
-      // Calculate negative streak (days beyond 3)
-      negativeStreak = -(daysSinceLastCompletion - 3);
-    } else {
-      negativeStreak = 0; // Explicitly set to 0 when not in negative streak
-      // Calculate current streak allowing one day gap
-      DateTime? lastDate;
-
-      for (var completion in completions) {
-        final completedAt =
-            DateTime.parse(completion['completed_at'] as String);
-        final dateOnly =
-            DateTime(completedAt.year, completedAt.month, completedAt.day);
-
-        if (lastDate == null) {
-          currentCount = 1;
-          lastDate = dateOnly;
-          streakStartDate = dateOnly;
-        } else {
-          final difference = lastDate.difference(dateOnly).inDays;
-          if (difference <= 2) {
-            // Count the day but don't increment for the gap
-            currentCount++;
-            streakStartDate = dateOnly;
-          } else {
-            // More than one day gap, break the streak
-            break;
-          }
-          lastDate = dateOnly;
-        }
-      }
-
-      currentStreak = currentCount;
-      streakAtRisk = daysSinceLastCompletion == 2;
-    }
-
-    // Calculate longest streak
-    DateTime? lastDateForLongest;
-    int countForLongest = 0;
-
-    for (var completion in completions) {
-      final completedAt = DateTime.parse(completion['completed_at'] as String);
-      final dateOnly =
-          DateTime(completedAt.year, completedAt.month, completedAt.day);
-
-      if (lastDateForLongest == null) {
-        countForLongest = 1;
-        lastDateForLongest = dateOnly;
-      } else {
-        final difference = lastDateForLongest.difference(dateOnly).inDays;
-        if (difference <= 2) {
-          // Count the day but don't increment for the gap
-          countForLongest++;
-        } else {
-          // More than one day gap, break the streak
-          if (countForLongest > longestStreak) {
-            longestStreak = countForLongest;
-          }
-          countForLongest = 1;
-        }
-        lastDateForLongest = dateOnly;
-      }
-    }
-
-    if (countForLongest > longestStreak) {
-      longestStreak = countForLongest;
-    }
-
-    return {
-      'current_streak': currentStreak,
-      'longest_streak': longestStreak,
-      'streak_at_risk': streakAtRisk,
-      'streak_start_date': streakStartDate,
-      'negative_streak': negativeStreak
-    };
+    return computeStreaks([
+      for (final c in completions) DateTime.parse(c['completed_at'] as String),
+    ]).toMap();
   }
 
   Future<List<Map<String, dynamic>>> getCompletionHistory(
@@ -519,8 +416,7 @@ class DBHelper {
 
   Future<void> toggleHabitSkip(String habitId) async {
     final Database db = await database;
-    final today = DateTime.now().copyWith(
-        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+    final today = todayStart();
 
     // Check if habit is already skipped today
     final skip = await db.query(
@@ -551,8 +447,7 @@ class DBHelper {
 
   Future<bool> isHabitSkippedToday(String habitId) async {
     final Database db = await database;
-    final today = DateTime.now().copyWith(
-        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+    final today = todayStart();
 
     final skip = await db.query(
       'habit_skips',
@@ -566,8 +461,7 @@ class DBHelper {
 
   Future<void> toggleHabitState(String habitId) async {
     final Database db = await database;
-    final today = DateTime.now().copyWith(
-        hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+    final today = todayStart();
 
     // Check current state
     final completion = await db.query(
@@ -629,8 +523,7 @@ class DBHelper {
   Future<Map<String, int>> getTodayStreakCounts() async {
     try {
       final Database db = await database;
-      final today = DateTime.now().copyWith(
-          hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0);
+      final today = todayStart();
 
       // Get all habits
       final habits = await db.query('habits');
@@ -721,10 +614,8 @@ class DBHelper {
     for (final a in areas) {
       final objs = await getObjectivesWithProgress(a['id'] as String,
           includeArchived: false);
-      final scores = objs.map((o) => o['score']).whereType<double>().toList();
-      final score =
-          scores.isEmpty ? null : scores.reduce((x, y) => x + y) / scores.length;
-      result.add({...a, 'score': score, 'objective_count': objs.length});
+      result.add(
+          {...a, 'score': meanScore(objs), 'objective_count': objs.length});
     }
     return result;
   }
@@ -800,18 +691,7 @@ class DBHelper {
     for (final o in objs) {
       final krs =
           await getKeyResultsWithProgress(o['id'] as String, objective: o);
-      double? score;
-      double weightedSum = 0, weights = 0;
-      for (final k in krs) {
-        final s = k['score'];
-        if (s is double) {
-          final w = (k['weight'] as num?)?.toDouble() ?? 1;
-          weightedSum += s * w;
-          weights += w;
-        }
-      }
-      if (weights > 0) score = weightedSum / weights;
-      result.add({...o, 'score': score, 'key_results': krs});
+      result.add({...o, 'score': weightedScore(krs), 'key_results': krs});
     }
     return result;
   }
@@ -1017,102 +897,53 @@ class DBHelper {
 
   // ---------- The engine ----------
 
-  (DateTime, DateTime) _resolveWindow(
-      Map<String, dynamic> kr, Map<String, dynamic>? objective) {
-    final now = DateTime.now();
-    final mode = (kr['window_mode'] ?? 'OBJECTIVE') as String;
-    switch (mode) {
-      case 'ROLLING':
-        final days = (kr['window_days'] as int?) ?? 7;
-        return (now.subtract(Duration(days: days)), now);
-      case 'YEAR':
-        return (DateTime(now.year, 1, 1), DateTime(now.year, 12, 31, 23, 59, 59));
-      case 'ALL':
-        return (DateTime(1970), now);
-      case 'OBJECTIVE':
-      default:
-        if (objective != null) {
-          return (
-            DateTime.parse(objective['start_date'] as String),
-            DateTime.parse(objective['end_date'] as String)
-          );
-        }
-        final p = Period.current();
-        return (p.start, p.end);
-    }
-  }
-
   /// Folds the log into a KR's current value + auto-score. Nothing is stored.
   /// Returns: current, target, score (null when no target / track-only),
   /// unit, on_pace, aggregation, direction.
+  ///
+  /// The rules themselves live in `okr/scoring.dart` and are unit tested there.
   Future<Map<String, dynamic>> computeKr(
     Map<String, dynamic> kr, {
     Map<String, dynamic>? objective,
   }) async {
     final db = await database;
-    final (start, end) = _resolveWindow(kr, objective);
-    final startIso = start.toIso8601String();
-    final endIso = end.toIso8601String();
-    final agg = kr['aggregation'] as String;
+    final mode = (kr['window_mode'] ?? 'OBJECTIVE') as String;
+    // Only the OBJECTIVE window reads the parent's dates, so parse them lazily
+    // — a KR on any other mode must not depend on the objective being sane.
+    final usesObjective = mode != 'ROLLING' && mode != 'YEAR' && mode != 'ALL';
+    final (start, end) = resolveWindow(
+      mode: mode,
+      windowDays: kr['window_days'] as int?,
+      objectiveStart: usesObjective && objective != null
+          ? DateTime.parse(objective['start_date'] as String)
+          : null,
+      objectiveEnd: usesObjective && objective != null
+          ? DateTime.parse(objective['end_date'] as String)
+          : null,
+    );
 
     final rows = await db.query('measurements',
+        columns: ['value'],
         where: 'key_result_id = ? AND recorded_at >= ? AND recorded_at <= ?',
-        whereArgs: [kr['id'], startIso, endIso],
+        whereArgs: [
+          kr['id'],
+          start.toIso8601String(),
+          end.toIso8601String(),
+        ],
         orderBy: 'recorded_at DESC');
 
-    double sumV = 0;
-    double? latestV;
-    final count = rows.length;
-    for (final r in rows) {
-      sumV += (r['value'] as num).toDouble();
-    }
-    if (rows.isNotEmpty) {
-      latestV = (rows.first['value'] as num).toDouble();
-    }
-
-    final direction = (kr['direction'] ?? 'UP') as String;
-    final double? current = switch (agg) {
-      'COUNT' => count.toDouble(),
-      'LATEST' => latestV,
-      _ => sumV, // SUM
-    };
-
-    final target = (kr['target_value'] as num?)?.toDouble();
-    double? score;
-    if (target != null && target != 0 && current != null) {
-      final raw = direction == 'DOWN'
-          ? (current <= 0 ? 1.0 : target / current)
-          : current / target;
-      score = raw.clamp(0.0, 1.0);
-    }
-
-    String? onPace;
-    if (score != null) {
-      final mode = (kr['window_mode'] ?? 'OBJECTIVE') as String;
-      double frac = 1.0;
-      final total = end.difference(start).inSeconds;
-      if ((mode == 'OBJECTIVE' || mode == 'YEAR') && total > 0) {
-        frac = (DateTime.now().difference(start).inSeconds / total)
-            .clamp(0.0, 1.0);
-      }
-      if (score >= (frac + 0.05).clamp(0.0, 1.0)) {
-        onPace = 'ahead';
-      } else if (score >= frac - 0.1) {
-        onPace = 'on_track';
-      } else {
-        onPace = 'behind';
-      }
-    }
-
-    return {
-      'current': current,
-      'target': target,
-      'score': score,
-      'unit': kr['unit'],
-      'on_pace': onPace,
-      'aggregation': agg,
-      'direction': direction,
-    };
+    return computeKrState(
+      aggregation: kr['aggregation'] as String,
+      direction: (kr['direction'] ?? 'UP') as String,
+      mode: mode,
+      target: (kr['target_value'] as num?)?.toDouble(),
+      unit: kr['unit'] as String?,
+      valuesNewestFirst: [
+        for (final r in rows) (r['value'] as num).toDouble(),
+      ],
+      start: start,
+      end: end,
+    ).toMap();
   }
 
   // ---------- Logging (executions + measurements) ----------

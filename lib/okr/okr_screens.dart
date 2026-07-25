@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../db_helper.dart';
 import 'home_trackers.dart';
 import 'period.dart';
+import 'rollup.dart';
 import 'widgets.dart';
 
 /// A simple centered rename dialog (keyboard re-centers it above the field).
@@ -379,19 +380,10 @@ class _ObjectiveScreenState extends State<ObjectiveScreen> {
   Future<void> _load() async {
     final krs = await DBHelper()
         .getKeyResultsWithProgress(objId, objective: widget.objective);
-    double sum = 0, w = 0;
-    for (final k in krs) {
-      final s = k['score'];
-      if (s is double) {
-        final ww = (k['weight'] as num?)?.toDouble() ?? 1;
-        sum += s * ww;
-        w += ww;
-      }
-    }
     if (!mounted) return;
     setState(() {
       _krs = krs;
-      _score = w > 0 ? sum / w : null;
+      _score = weightedScore(krs);
       _loading = false;
     });
   }
