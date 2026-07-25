@@ -217,8 +217,35 @@ Future<bool> confirmDelete(
   return ok ?? false;
 }
 
-/// Copy for deleting a key result — shared by the objective screen and Quick
-/// log, which both offer the same action.
+/// A simple centered rename dialog (the keyboard re-centers it above the
+/// field). Returns the trimmed text, or null if dismissed.
+Future<String?> promptText(BuildContext context,
+    {required String title, required String initial}) {
+  final controller = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+        onSubmitted: (v) => Navigator.pop(context, v.trim()),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save')),
+      ],
+    ),
+  );
+}
+
+/// Copy for deleting a key result — shared by the OKR tree and the Record
+/// page, which both offer the same action.
 const kDeleteKrTitle = 'Delete key result';
 String deleteKrMessage(String title) =>
     'Delete "$title"? Its logged measurements are removed.';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'habits/habits_screen.dart';
 import 'okr/okr_screens.dart';
+import 'okr/okr_tree.dart';
 
 void main() {
   // sqflite and home_widget both reach for the binding, so make sure it is up

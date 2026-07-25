@@ -607,15 +607,27 @@ class DBHelper {
     await db.delete('areas', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Areas with an aggregate score = mean of their objectives' scores.
-  Future<List<Map<String, dynamic>>> getAreasWithRollup() async {
+  /// The whole OKR tree, one shot: areas → `objectives` → `key_results`, each
+  /// level carrying its computed score.
+  ///
+  /// Archived objectives are hidden unless [includeArchived], and never count
+  /// towards an area's score or objective count even when shown — a closed
+  /// quarter shouldn't drag this quarter's number around.
+  Future<List<Map<String, dynamic>>> getAreasWithRollup({
+    bool includeArchived = false,
+  }) async {
     final areas = await getAreas();
     final result = <Map<String, dynamic>>[];
     for (final a in areas) {
       final objs = await getObjectivesWithProgress(a['id'] as String,
-          includeArchived: false);
-      result.add(
-          {...a, 'score': meanScore(objs), 'objective_count': objs.length});
+          includeArchived: includeArchived);
+      final active = objs.where((o) => o['status'] != 'archived').toList();
+      result.add({
+        ...a,
+        'score': meanScore(active),
+        'objective_count': active.length,
+        'objectives': objs,
+      });
     }
     return result;
   }
@@ -855,10 +867,14 @@ class DBHelper {
   }
 
   /// Every key result (across all objectives, plus standalone), each with its
-  /// computed state — the flat "quick log" list.
+  /// computed state — the flat list behind the Record page and History tab.
+  /// Also carries `last_logged_at` (ISO string or null) so callers can order by
+  /// recency, and `objective_title` for context in a flat list. Both are folded
+  /// from what's already read here, never stored.
   Future<List<Map<String, dynamic>>> getAllKeyResultsWithProgress() async {
     final db = await database;
     final krs = await db.query('key_results', orderBy: 'created_at ASC');
+    final lastLogged = await _lastLoggedAt();
     final result = <Map<String, dynamic>>[];
     for (final k in krs) {
       Map<String, dynamic>? obj;
@@ -867,9 +883,28 @@ class DBHelper {
             where: 'id = ?', whereArgs: [k['objective_id']], limit: 1);
         obj = o.isNotEmpty ? o.first : null;
       }
-      result.add({...k, ...await computeKr(k, objective: obj)});
+      result.add({
+        ...k,
+        ...await computeKr(k, objective: obj),
+        'last_logged_at': lastLogged[k['id']],
+        'objective_title': obj?['title'],
+      });
     }
     return result;
+  }
+
+  /// key result id → newest measurement timestamp. One grouped query over the
+  /// `idx_meas_kr` index rather than one per key result.
+  Future<Map<String?, String>> _lastLoggedAt() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT key_result_id AS id, MAX(recorded_at) AS at FROM measurements '
+      'WHERE key_result_id IS NOT NULL GROUP BY key_result_id',
+    );
+    return {
+      for (final r in rows)
+        if (r['at'] != null) r['id'] as String: r['at'] as String,
+    };
   }
 
   /// Key results for an objective, each merged with its computed state.

@@ -31,6 +31,18 @@ db_helper.dart     all persistence — schema, migrations, CRUD
 core/ + *_rules/scoring/rollup/period    pure domain logic
 ```
 
+The OKR tab is **one screen**: `okr/okr_tree.dart` renders areas → objectives →
+key results as an indented accordion. Areas are headings, not destinations;
+objectives are the only expand/collapse level. There is no per-area or
+per-objective screen — entity actions live on long-press (`showActionSheet`),
+including adding a child ("Add objective" on an area, "Add key result" on an
+objective), so no row carries a permanent add affordance. `InlineAddField`
+survives only for "Add area", once, at the bottom of the list.
+Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
+`QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
+most-recently-logged-first capture list). Measurement writes go through
+`okr/log_value.dart` so the Record page and KR detail can't drift apart.
+
 **Nothing computed is ever stored.** Streaks, KR scores, pace and rollups are
 folded from the log on every read. Those rules live in pure functions that take
 their inputs explicitly (including `now`), so they are unit tested without a
@@ -43,9 +55,12 @@ and don't recompute a rule inline in a widget.
 - Rows are raw `Map<String, dynamic>`, sometimes merged with computed fields
   (`{...kr, ...computeKr(kr)}`). No model layer — column names are the map keys.
 - State is plain `setState`; each screen has a `_load()` that queries
-  `DBHelper()` (a singleton) and refreshes after a push.
+  `DBHelper()` (a singleton) and refreshes after a push. UI-only state (which
+  objectives are collapsed, which Record row is open) lives in `setState` and is
+  never persisted.
 - Spacing comes from `ui/kit.dart` (`kGapXs`=4 … `kGapXl`=24). Reuse
-  `showActionSheet`, `confirmDelete`, `pickEmoji`, `InlineAddField`, `ScoreBar`.
+  `showActionSheet`, `confirmDelete`, `promptText`, `pickEmoji`,
+  `InlineAddField`, `ScoreBar`.
 
 ## Schema
 
