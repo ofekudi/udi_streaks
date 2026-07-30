@@ -14,6 +14,9 @@ const kFormPadding = EdgeInsets.all(kGapLg);
 /// buttons that sit next to a text field.
 const double kTapTarget = 48;
 
+/// Corner radius of a card that holds a group of rows.
+const double kRadiusCard = 16;
+
 /// A consistent, roomy bottom sheet: full width, rounded top, a drag handle,
 /// a title with a close button, and a scrolling body that grows with content
 /// up to [heightFactor] of the screen. Tapping outside dismisses it.
@@ -529,6 +532,9 @@ String fmtDate(DateTime d) =>
 /// A neutral 0–1 OKR score, e.g. "0.71".
 String fmtScore(double? s) => s == null ? '–' : s.toStringAsFixed(2);
 
+/// A 0–1 fraction as a whole percent, e.g. "71%".
+String fmtPct(double? v) => v == null ? '–' : '${(v * 100).round()}%';
+
 /// The move since the previous entry, e.g. `▲ +6`. Green when it went the way
 /// the key result wants, orange when it went against it, muted when unchanged.
 class DeltaText extends StatelessWidget {
@@ -557,21 +563,31 @@ class DeltaText extends StatelessWidget {
 }
 
 /// A thin progress bar for a KR / objective score.
+///
+/// The colour comes from the scheme, so it holds its contrast against any
+/// surface the bar is drawn on: `tertiary` marks a key result that wants its
+/// number to go *down*, `primary` everything else. [label] is what the bar
+/// measures — without it the bar is colour alone and announces nothing.
 class ScoreBar extends StatelessWidget {
   final double value; // 0..1
   final bool down;
-  const ScoreBar(this.value, {super.key, this.down = false});
+  final String? label;
+  const ScoreBar(this.value, {super.key, this.down = false, this.label});
 
   @override
   Widget build(BuildContext context) {
-    final color = down ? Colors.orange : Colors.green.shade600;
+    final scheme = Theme.of(context).colorScheme;
+    final v = value.clamp(0.0, 1.0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: LinearProgressIndicator(
-        value: value.clamp(0.0, 1.0),
+        value: v,
         minHeight: 6,
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        valueColor: AlwaysStoppedAnimation(color),
+        backgroundColor: scheme.surfaceContainerHighest,
+        valueColor:
+            AlwaysStoppedAnimation(down ? scheme.tertiary : scheme.primary),
+        semanticsLabel: label,
+        semanticsValue: fmtPct(v),
       ),
     );
   }

@@ -50,9 +50,12 @@ class KrValueCell extends StatelessWidget {
 }
 
 /// The tree's key-result row, standing on its own at the top of the detail
-/// screen: title, the bar beneath it, and the value in the right-hand column
-/// beside both. The screen it heads says everything else about the key result,
-/// so it states the number and nothing more.
+/// screen: title and value on one line, the bar spanning the width beneath
+/// them. The screen it heads says everything else about the key result, so it
+/// states the number and nothing more.
+///
+/// Its shape tracks the tree's `_krRow` deliberately — the row you tapped and
+/// the screen it opens must not read differently.
 class KrSummaryRow extends StatelessWidget {
   final Map<String, dynamic> kr;
 
@@ -61,25 +64,27 @@ class KrSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(kr['title'],
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(kr['title'],
                   style: theme.textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w700)),
-              if (kr['target'] != null) ...[
-                const SizedBox(height: kGapSm),
-                ScoreBar(kr['score'] as double? ?? 0, down: krWantsDown(kr)),
-              ],
-            ],
-          ),
+            ),
+            const SizedBox(width: kGapSm),
+            KrValueCell(kr),
+          ],
         ),
-        const SizedBox(width: kGapSm),
-        KrValueCell(kr),
+        if (kr['target'] != null) ...[
+          const SizedBox(height: kGapSm),
+          ScoreBar(kr['score'] as double? ?? 0,
+              down: krWantsDown(kr), label: kr['title'] as String),
+        ],
       ],
     );
   }

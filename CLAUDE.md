@@ -52,24 +52,41 @@ instead of tying at 0 and surfacing mid-list. With the archive hidden, a
 reorder renumbers only the visible objectives — accepted; archived rows are an
 edge state. `test/reorder_test.dart` covers the round trip.
 
-Every row is at most two lines — title, then a `ScoreBar` — and the only number
-in the tree is a key result's `X / Y`, in a right-hand column beside both lines
-so the title keeps its own line. Objectives and areas show their rollup as the
-bar alone; `fmtScore` is only used by the quarter-close screen.
-That row lives in `okr/kr_row.dart`: `KrValueCell` is the `X / Y` column the tree
-and the detail screen share, and `KrSummaryRow` is the whole row, which is how
-`KrDetailScreen` opens — the same shape the tree row you tapped had, so the
-number can't read differently on the two screens. The tree passes `KrValueCell` a
-narrower `maxWidth` than the detail screen's default, because there the number
-shares its row with a title; it scales the text down rather than wrapping.
+Every row is two lines: a title, and a `ScoreBar` spanning the full width of the
+card beneath it. A key result's `X / Y` shares the *first* line with its title,
+right-aligned — which is what lets its bar be as long as its objective's, so two
+bars on the same 0..1 scale can be compared by eye instead of ending at
+different arbitrary places. An area heading, having no bar, states its rollup as
+`fmtPct` on the right of its label; `fmtScore` (a raw 0..1) stays
+quarter-close-only. That row lives in `okr/kr_row.dart`: `KrValueCell` is the
+`X / Y` cell the tree and the detail screen share, and `KrSummaryRow` is the whole
+row, which is how `KrDetailScreen` opens — the same shape the tree row you tapped
+had, so the number can't read differently on the two screens. **Restructure one
+and you must restructure the other.** The tree passes `KrValueCell` a narrower
+`maxWidth` than the detail screen's default; it scales the text down rather than
+wrapping.
 
-**Nothing in the tree is indented.** Every row — area heading, objective, key
-result — starts at `kGapXs`; only an objective's chevron pushes its
-own title in to 32. A key-result indent left 136dp of title on a 360dp phone and
-wrapped ordinary titles onto two lines, and it said nothing the accordion and the
-type weights don't already say (objective `titleSmall` w700, key result
-`bodyMedium` w600 with its number alongside). Don't reintroduce a level indent or
-a guide rule to mark the hierarchy.
+**Hierarchy comes from containment, never from horizontal offset.** An objective
+and its key results are one card: `surfaceContainerLow` at `kRadiusCard`,
+elevation 0, an `outlineVariant` border, and a tone deeper at `surfaceContainer`
+once archived — *not* `surfaceContainerLowest`, which is pure white and glows
+against the page. Every row starts on one edge — `kGapSm` of page padding plus
+`kGapMd` of card padding — so nothing is indented and, crucially, **no child sits
+left of its parent**. That was the bug: a *leading* chevron took 24dp and pushed
+an objective's own title in to 32 while its key results stayed at 4. The chevron
+is trailing now, and it needs no tap target of its own because the whole header
+toggles. Indenting the children instead was tried and reverted — it left 136dp of
+title on a 360dp phone. Don't reintroduce a level indent or a leading chevron;
+the card and the type weights (objective `titleSmall` w700, key result
+`bodyMedium` w600) already say what an indent would.
+`test/okr_tree_layout_test.dart` pins the shared edge.
+
+The card is **ruled**, by `_rule()`: under each area heading, between an
+objective's own summary and its children, and between every pair of key-result
+rows. The fill and the two-line rhythm were not enough on a real screen — a card
+only a tone off the page had an ambiguous edge, and a row's title sits 8dp above
+its own bar but only 16dp below the previous row's, so a bar read as easily
+upward as downward. Proximity can't carry that at a 2:1 ratio; the rules can.
 Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
 `QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
 most-recently-logged-first capture list). Both tabs carry that FAB; backing out
@@ -153,6 +170,10 @@ and don't recompute a rule inline in a widget.
 - Spacing comes from `ui/kit.dart` (`kGapXs`=4 … `kGapXl`=24). Reuse
   `showActionSheet`, `confirmDelete`, `promptText`, `pickEmoji`,
   `InlineAddField`, `ScoreBar`.
+- `ScoreBar` takes its colour from the scheme — `primary`, or `tertiary` for a
+  key result that wants its number to go *down* — so it holds contrast on any
+  surface, and a dark theme would need nothing. It is otherwise pure colour, so
+  pass it a `label`: that plus its percentage is all a screen reader gets.
 
 ## Schema
 
