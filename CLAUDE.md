@@ -96,6 +96,31 @@ stays put when nothing was logged. Measurement writes go through
 `okr/log_value.dart` so the Record page and KR detail can't drift apart — the
 one exception is `DBHelper._insertCompletion`, below.
 
+The Record page **fills many key results in one pass**. Every value key result
+carries its own field, all open at once, in a `Map<String, TextEditingController>`
+keyed by id; one `Log N` bar (or the keyboard's done key on any field) writes them
+together through `logKrValue`. A blank field is a key result you didn't do, which
+is why there is no selection step — and a field whose text won't parse keeps it,
+so a bad entry doesn't cost the rest of the pass. Four things hold this together
+and shouldn't be undone piecemeal:
+
+- **There is no search box.** `byRecency` puts what you logged last at the top, so
+  logging five exercises together makes them the top five next time; recency is
+  the finding mechanism. `_order` freezes it for the visit so nothing moves
+  mid-pass.
+- **Each row states value *and* progress** — the `_subtitle` line plus a
+  `ScoreBar`. Choosing what to fill has to be possible without leaving the page.
+- **A `COUNT` keeps its one-tap `+1` and gets no field.** `aggregateValues` counts
+  *rows*, so a "3" typed into a COUNT would write one row worth 3 and score as 1.
+  A tally's unit of record is one occurrence.
+- **Leaving with text in a field asks first** (`PopScope` + `confirmDiscard`).
+  Committing is already reversible — any measurement can be deleted from its
+  entry — so the guard exists for the typing, not the writes. Nothing is
+  persisted: no draft outlives the visit.
+
+`test/record_multi_test.dart` pins all four; `test/record_order_test.dart` pins
+the ordering the missing search box relies on.
+
 `KrDetailScreen` **states the number, shows the history, and records into it**.
 Its history is one list with no view switch: `byPeriodDesc` (`okr/period.dart`)
 buckets entries into quarters, and each quarter heading carries the total and the

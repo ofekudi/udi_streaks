@@ -5,6 +5,9 @@ import '../ui/kit.dart';
 import 'log_value.dart';
 import 'okr_screens.dart';
 
+/// The width of a row's value field, and of the column a COUNT's `+1` sits in.
+const double _kFieldWidth = 112;
+
 /// Newest-logged first, never-logged last, `created_at` breaking ties.
 ///
 /// `last_logged_at` and `created_at` are both `toIso8601String()` output, so a
@@ -27,19 +30,6 @@ List<Map<String, dynamic>> byRecency(List<Map<String, dynamic>> krs) {
   return [...logged, ...never];
 }
 
-/// Case-insensitive substring match on the key result's title or its
-/// objective's. An empty query matches everything, in order.
-List<Map<String, dynamic>> matching(
-    List<Map<String, dynamic>> krs, String query) {
-  final q = query.trim().toLowerCase();
-  if (q.isEmpty) return krs;
-  bool hit(Object? s) => s is String && s.toLowerCase().contains(q);
-  return [
-    for (final k in krs)
-      if (hit(k['title']) || hit(k['objective_title'])) k,
-  ];
-}
-
 /// Reapplies an order captured earlier by [byRecency]. Key results the order
 /// doesn't know about (created while the page was open) go to the end.
 List<Map<String, dynamic>> inStoredOrder(
@@ -60,7 +50,13 @@ List<Map<String, dynamic>> inStoredOrder(
 ///
 /// Deliberately flat and recency-ordered rather than mirroring the tree: when
 /// you open this you already know what you're logging, and the thing you log
-/// daily should be at the top. Reviewing the hierarchy is the tree's job.
+/// daily should be at the top.
+///
+/// It fills **many key results in one pass** — a field per value key result,
+/// all open at once, committed together. A blank field is a key result you
+/// didn't do, which is why there's no selection step. Recency ordering is also
+/// what stands in for a search box: log five exercises together and they are
+/// the top five next time.
 class RecordScreen extends StatefulWidget {
   /// Fired on every successful log with the row that took it, so the caller
   /// can land on what was recorded. A pop result can't carry this — the system
@@ -76,10 +72,11 @@ class RecordScreen extends StatefulWidget {
 class _RecordScreenState extends State<RecordScreen> {
   List<Map<String, dynamic>> _krs = [];
   bool _loading = true;
-  String _query = '';
-  String? _logOpenFor; // KR id whose inline value field is open
-  final _entry = TextEditingController();
-  final _search = TextEditingController();
+
+  /// One controller per value key result, by id, so every row holds its own
+  /// text until the whole pass is committed. Kept for the visit only — nothing
+  /// here is persisted, and leaving with text in it asks first.
+  final Map<String, TextEditingController> _fields = {};
 
   /// The recency order, captured once per visit. Re-sorting after every log
   /// would yank the row you just tapped out from under your finger; the list
@@ -94,8 +91,9 @@ class _RecordScreenState extends State<RecordScreen> {
 
   @override
   void dispose() {
-    _entry.dispose();
-    _search.dispose();
+    for (final c in _fields.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -104,14 +102,38 @@ class _RecordScreenState extends State<RecordScreen> {
     if (!mounted) return;
     final ordered =
         _order == null ? byRecency(krs) : inStoredOrder(krs, _order!);
+    final live = {for (final k in ordered) k['id'] as String};
     setState(() {
       _order ??= [for (final k in ordered) k['id'] as String];
       _krs = ordered;
       _loading = false;
+      // A row can be deleted from its long-press sheet mid-visit.
+      for (final id in _fields.keys.toList()) {
+        if (!live.contains(id)) _fields.remove(id)!.dispose();
+      }
     });
   }
 
   bool _isCount(Map<String, dynamic> k) => k['aggregation'] == 'COUNT';
+
+  /// The key results that take a typed value. A COUNT doesn't: its tap is the
+  /// record, so it has nothing pending.
+  Iterable<Map<String, dynamic>> get _valueKrs => _krs.where((k) => !_isCount(k));
+
+  /// The commit bar's count and the exit guard both read every field, so a
+  /// keystroke in any one of them rebuilds the page.
+  TextEditingController _fieldFor(String id) => _fields.putIfAbsent(id, () {
+        final c = TextEditingController();
+        c.addListener(() {
+          if (mounted) setState(() {});
+        });
+        return c;
+      });
+
+  String _textFor(Map<String, dynamic> k) =>
+      _fields[k['id']]?.text.trim() ?? '';
+
+  int get _filled => _valueKrs.where((k) => _textFor(k).isNotEmpty).length;
 
   String _valueLine(Map<String, dynamic> k) {
     final unit = k['unit'] ?? '';
@@ -133,75 +155,78 @@ class _RecordScreenState extends State<RecordScreen> {
     _load();
   }
 
-  Future<void> _logValue(Map<String, dynamic> k) async {
-    final raw = _entry.text.trim();
-    if (!await logKrValue(k, raw)) {
-      if (raw.isNotEmpty && mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text(kLogValueHelp)));
+  /// Writes every filled field, one measurement each. A row whose text doesn't
+  /// parse keeps it, so the pass can be fixed rather than retyped.
+  Future<void> _logAll() async {
+    final pending = [
+      for (final k in _valueKrs)
+        if (_textFor(k).isNotEmpty) k,
+    ];
+    if (pending.isEmpty) return;
+    var rejected = false;
+    for (final k in pending) {
+      if (await logKrValue(k, _textFor(k))) {
+        _fields[k['id']]?.clear();
+        widget.onLogged?.call(k);
+      } else {
+        rejected = true;
       }
-      return;
     }
-    widget.onLogged?.call(k);
-    _entry.clear();
-    if (mounted) {
-      setState(() => _logOpenFor = null);
-      FocusScope.of(context).unfocus();
+    if (!mounted) return;
+    if (rejected) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text(kLogValueHelp)));
     }
-    _load();
+    FocusScope.of(context).unfocus();
+    await _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final visible = matching(_krs, _query);
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Record'),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(kGapMd, kGapSm, kGapMd, kGapSm),
-                  child: TextField(
-                    controller: _search,
-                    onChanged: (v) => setState(() => _query = v),
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: 'Search key results',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () {
-                                _search.clear();
-                                setState(() => _query = '');
-                              },
-                            ),
-                      border: const OutlineInputBorder(),
-                    ),
+    return PopScope(
+      canPop: _filled == 0,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final navigator = Navigator.of(context);
+        final count = _filled;
+        if (await confirmDiscard(context,
+            title:
+                'Discard $count unlogged ${count == 1 ? 'value' : 'values'}?')) {
+          navigator.pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: const Text('Record'),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _krs.isEmpty
+                ? _empty('No key results yet')
+                : ListView(
+                    padding:
+                        const EdgeInsets.fromLTRB(kGapMd, kGapSm, kGapMd, kGapXl),
+                    children: [for (final k in _krs) _row(k)],
                   ),
-                ),
-                Expanded(
-                  child: _krs.isEmpty
-                      ? _empty('No key results yet')
-                      : visible.isEmpty
-                          ? _empty('No key result matches "$_query".')
-                          : ListView(
-                              padding: const EdgeInsets.fromLTRB(
-                                  kGapMd, 0, kGapMd, kGapXl),
-                              children: [for (final k in visible) _row(k)],
-                            ),
-                ),
-              ],
-            ),
+        bottomNavigationBar:
+            _loading || _valueKrs.isEmpty ? null : _commitBar(),
+      ),
     );
   }
+
+  Widget _commitBar() => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(kGapMd, kGapSm, kGapMd, kGapSm),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _filled == 0 ? null : _logAll,
+              child: Text(_filled == 0 ? 'Log' : 'Log $_filled'),
+            ),
+          ),
+        ),
+      );
 
   Widget _empty(String text) => Center(
         child: Padding(
@@ -210,57 +235,66 @@ class _RecordScreenState extends State<RecordScreen> {
         ),
       );
 
+  /// Title, where it stands, and its progress — enough to decide what to fill
+  /// without leaving the page — beside the field that fills it.
   Widget _row(Map<String, dynamic> k) {
-    final id = k['id'] as String;
-    final open = _logOpenFor == id;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ListTile(
-          dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: kGapXs),
-          title: Text(k['title'],
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-          subtitle:
-              Text(_subtitle(k), maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: _isCount(k)
-              ? IconButton.filledTonal(
-                  tooltip: '+1',
-                  icon: const Icon(Icons.add),
-                  onPressed: () => _bump(k),
-                )
-              : IconButton.filledTonal(
-                  tooltip: 'Log a value',
-                  icon: Icon(open ? Icons.close : Icons.add),
-                  onPressed: () => setState(() {
-                    _logOpenFor = open ? null : id;
-                    _entry.clear();
-                  }),
-                ),
-          onTap: () => _open(k),
-          onLongPress: () => _menu(k),
-        ),
-        if (open)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(kGapXs, 0, kGapSm, kGapSm),
-            child: Row(children: [
-              Expanded(
-                child: LogValueField(
-                  controller: _entry,
-                  autofocus: true,
-                  unit: k['unit'] as String?,
-                  onSubmit: () => _logValue(k),
+    final theme = Theme.of(context);
+    final score = (k['score'] as num?)?.toDouble();
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kTapTarget),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => _open(k),
+              onLongPress: () => _menu(k),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: kGapXs, vertical: kGapSm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(k['title'],
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    Text(_subtitle(k),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    if (k['target'] != null) ...[
+                      const SizedBox(height: kGapXs),
+                      ScoreBar(score ?? 0,
+                          down: krWantsDown(k), label: k['title'] as String),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(width: kGapSm),
-              FilledButton(
-                  onPressed: () => _logValue(k), child: const Text('Log')),
-            ]),
+            ),
           ),
-      ],
+          const SizedBox(width: kGapSm),
+          SizedBox(
+            width: _kFieldWidth,
+            child: _isCount(k)
+                ? Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton.filledTonal(
+                      tooltip: '+1',
+                      icon: const Icon(Icons.add),
+                      onPressed: () => _bump(k),
+                    ),
+                  )
+                : LogValueField(
+                    controller: _fieldFor(k['id'] as String),
+                    unit: k['unit'] as String?,
+                    hintText: '',
+                    onSubmit: _logAll,
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

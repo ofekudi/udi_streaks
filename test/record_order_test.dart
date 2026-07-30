@@ -1,5 +1,6 @@
-// The Record page's ordering and filtering, kept as pure functions so they can
-// be tested without a database.
+// The Record page's ordering, kept as pure functions so it can be tested
+// without a database. Recency is load-bearing: it is what stands in for the
+// search box the page no longer has.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:udi_streaks/okr/record_screen.dart';
@@ -62,36 +63,6 @@ void main() {
 
     test('an empty list stays empty', () {
       expect(byRecency([]), isEmpty);
-    });
-  });
-
-  group('matching', () {
-    final rows = [
-      kr('a', title: 'Squat 120kg', objective: 'Get stronger'),
-      kr('b', title: 'Read 12 books', objective: 'Read more'),
-      kr('c', title: 'Long run 18km'),
-    ];
-
-    test('an empty query is the identity', () {
-      expect(ids(matching(rows, '')), ['a', 'b', 'c']);
-      expect(ids(matching(rows, '   ')), ['a', 'b', 'c']);
-    });
-
-    test('matches the title, case-insensitively', () {
-      expect(ids(matching(rows, 'SQUAT')), ['a']);
-      expect(ids(matching(rows, 'run')), ['c']);
-    });
-
-    test('matches the objective title too', () {
-      expect(ids(matching(rows, 'stronger')), ['a']);
-    });
-
-    test('tolerates a missing objective title', () {
-      expect(ids(matching(rows, '18km')), ['c']);
-    });
-
-    test('no match returns empty', () {
-      expect(matching(rows, 'deadlift'), isEmpty);
     });
   });
 

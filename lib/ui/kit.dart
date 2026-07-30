@@ -280,6 +280,29 @@ Future<bool> confirmDelete(
   return ok ?? false;
 }
 
+/// Guards leaving a page that holds typed-but-unsaved input. Returns true to
+/// discard it; dismissing counts as "keep editing". Title-only — the count in
+/// the title is the whole fact.
+Future<bool> confirmDiscard(BuildContext context,
+    {required String title}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text(title),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep editing')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Discard', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
+
 /// A simple centered rename dialog (the keyboard re-centers it above the
 /// field). Returns the trimmed text, or null if dismissed.
 Future<String?> promptText(BuildContext context,
@@ -310,8 +333,8 @@ Future<String?> promptText(BuildContext context,
 /// Asks for one value to log, returning the raw text the user typed or null if
 /// they backed out. Parsing is the caller's job, so the notation survives.
 ///
-/// A dialog rather than an inline field: the Record page has a row to expand
-/// under, a screen with a FAB does not.
+/// A dialog because the caller is already scoped to one key result — the
+/// screen states which, so the value is all that's left to ask for.
 Future<String?> promptLogValue(BuildContext context,
     {required String title, String? unit}) {
   final controller = TextEditingController();
@@ -469,12 +492,18 @@ class LogValueField extends StatelessWidget {
   final String? unit;
   final VoidCallback onSubmit;
   final bool autofocus;
+
+  /// Overrides the notation examples. The Record page passes `''`: its field is
+  /// a narrow column beside a row that already states the current value.
+  final String hintText;
+
   const LogValueField({
     super.key,
     required this.controller,
     required this.onSubmit,
     this.unit,
     this.autofocus = false,
+    this.hintText = 'e.g. 30, 3x10, 10,9,8',
   });
 
   @override
@@ -489,7 +518,7 @@ class LogValueField extends StatelessWidget {
       onSubmitted: (_) => onSubmit(),
       decoration: InputDecoration(
         isDense: true,
-        hintText: 'e.g. 30, 3x10, 10,9,8',
+        hintText: hintText,
         suffixText: unit ?? '',
         border: const OutlineInputBorder(),
       ),
