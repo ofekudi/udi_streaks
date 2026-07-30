@@ -26,6 +26,21 @@ class DBHelper {
   /// The current schema version. Also the version tests open at.
   static const int schemaVersion = 6;
 
+  /// Every table [exportAll] dumps. A new table has to be added here too, which
+  /// `export_test.dart` enforces by comparing this against the live schema.
+  static const List<String> exportedTables = [
+    'habits',
+    'habit_completions',
+    'habit_skips',
+    'areas',
+    'objectives',
+    'trackables',
+    'key_results',
+    'executions',
+    'measurements',
+    'reviews',
+  ];
+
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'habits_database.db');
     return _open(path);
@@ -451,6 +466,22 @@ class DBHelper {
         .toList();
   }
 
+  /// Removes a habit's completion for one day — the undo for a backfill that
+  /// picked the wrong date, and the only way to un-tick a day that isn't today.
+  ///
+  /// By date rather than by row id because a completion *is* a day here: both
+  /// [toggleHabitCompletion] and [addRetroactiveCompletion] refuse to write a
+  /// second one, and [getCompletionHistory] groups by day. Any count it fed a key
+  /// result cascades with it.
+  Future<void> deleteCompletionOn(String habitId, DateTime day) async {
+    final db = await database;
+    await db.delete(
+      'habit_completions',
+      where: 'habit_id = ? AND date(completed_at) = date(?)',
+      whereArgs: [habitId, day.toIso8601String()],
+    );
+  }
+
   Future<void> updateHabitName(String id, String newName) async {
     final Database db = await database;
     await db.update(
@@ -671,7 +702,48 @@ class DBHelper {
 
   Future<void> deleteArea(String id) async {
     final db = await database;
+    // Objectives and key results cascade; their grades don't — see
+    // [_deleteReviewsUnder].
+    await _deleteReviewsUnder(db, areaId: id);
     await db.delete('areas', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Deletes the `reviews` rows belonging to a subtree, before the subtree goes.
+  ///
+  /// `reviews` is keyed by `(subject_kind, subject_id, period)` strings and has
+  /// no foreign key — it has to outlive its subject to survive a renew, since
+  /// `renewObjective` grades the old quarter and archives it. Nothing else
+  /// removes them, so a deleted objective used to leave its grades behind
+  /// forever, keyed to an id no row has.
+  ///
+  /// Pass exactly one of [areaId], [objectiveId] or [keyResultId]. Must run
+  /// *before* the parent delete, while the children are still there to find.
+  Future<void> _deleteReviewsUnder(
+    DatabaseExecutor db, {
+    String? areaId,
+    String? objectiveId,
+    String? keyResultId,
+  }) async {
+    if (keyResultId != null) {
+      await db
+          .delete('reviews', where: 'subject_id = ?', whereArgs: [keyResultId]);
+      return;
+    }
+    if (objectiveId != null) {
+      await db.rawDelete(
+        'DELETE FROM reviews WHERE subject_id = ? OR subject_id IN '
+        '(SELECT id FROM key_results WHERE objective_id = ?)',
+        [objectiveId, objectiveId],
+      );
+      return;
+    }
+    await db.rawDelete(
+      'DELETE FROM reviews WHERE subject_id = ? '
+      'OR subject_id IN (SELECT id FROM objectives WHERE area_id = ?) '
+      'OR subject_id IN (SELECT k.id FROM key_results k '
+      'JOIN objectives o ON o.id = k.objective_id WHERE o.area_id = ?)',
+      [areaId, areaId, areaId],
+    );
   }
 
   /// The whole OKR tree, one shot: areas → `objectives` → `key_results`, each
@@ -750,6 +822,7 @@ class DBHelper {
 
   Future<void> deleteObjective(String id) async {
     final db = await database;
+    await _deleteReviewsUnder(db, objectiveId: id);
     await db.delete('objectives', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -960,6 +1033,7 @@ class DBHelper {
 
   Future<void> deleteKeyResult(String id) async {
     final db = await database;
+    await _deleteReviewsUnder(db, keyResultId: id);
     await db.delete('key_results', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1216,6 +1290,26 @@ class DBHelper {
     }
     await db.delete('measurements', where: 'id = ?', whereArgs: [id]);
     return false;
+  }
+
+  // ---------- Backup ----------
+
+  /// Every row in the database, table by table, as a JSON-encodable map.
+  ///
+  /// The app is local-only with no account, so a lost phone is lost data and
+  /// this is the only way out. Raw rows rather than anything friendlier on
+  /// purpose: nothing here is computed, so the tables *are* the state, and a
+  /// dump that mirrors the schema is one an importer can trust. `schema_version`
+  /// rides along because a restore has to know which migrations the rows predate.
+  Future<Map<String, dynamic>> exportAll() async {
+    final db = await database;
+    return {
+      'schema_version': schemaVersion,
+      'exported_at': DateTime.now().toIso8601String(),
+      'tables': {
+        for (final table in exportedTables) table: await db.query(table),
+      },
+    };
   }
 
   // ---------- History ----------

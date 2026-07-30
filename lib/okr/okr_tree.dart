@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
@@ -12,33 +15,26 @@ import 'record_screen.dart';
 ///
 /// Areas are headings rather than destinations — an area has no properties
 /// worth a screen. Objectives are the only expand/collapse level, so the
-/// chevron always means the same thing. Key results sit indented behind a
-/// hairline guide.
+/// chevron always means the same thing.
 ///
 /// Deliberately a flat [ListView] of heterogeneous children rather than nested
 /// [ExpansionTile]s: ExpansionTile imposes its own ListTile padding and chevron
-/// placement, which can't produce the indent scale below, and nesting two of
-/// them stacks two scroll-affecting animations.
+/// placement, and nesting two of them stacks two scroll-affecting animations.
 ///
-/// Indent scale, all off the `kGap*` ramp. Area headings and objectives share
-/// the left edge — the heading is distinguished by typography, which is what
-/// buys the third level its room:
-///   area heading        kGapXs
-///   objective title     kGapXs + 24dp chevron + kGapXs = 32
-///   key result title    48, behind a hairline dropping from the chevron
+/// Every row starts at the same left edge, `kGapXs`; only an objective's chevron
+/// pushes its own title in to 32. Key results are not indented — the indent cost
+/// 48dp of a title 136dp wide, and the accordion already says which objective
+/// they belong to. Weight tells the levels apart: an objective is `titleSmall`
+/// w700, a key result `bodyMedium` w600 with its number alongside.
 class GoalsTab extends StatefulWidget {
   const GoalsTab({super.key});
   @override
   State<GoalsTab> createState() => _GoalsTabState();
 }
 
-/// Where the guide rule sits: the centre of the objective row's chevron, so the
-/// line reads as descending from the thing you tapped.
-const double _kGuideX = kGapXs + 12;
-
-/// Left inset of key-result content — deep enough to read as a child level,
-/// still leaving ~288dp of title on a 360dp phone.
-const double _kKrIndent = kGapXl * 2;
+/// What a key result's number may claim, sharing its row with a title. Narrower
+/// than [KrValueCell]'s default, which the detail screen keeps.
+const double _kKrValueWidth = 110;
 
 class _GoalsTabState extends State<GoalsTab> {
   List<Map<String, dynamic>> _areas = [];
@@ -100,6 +96,8 @@ class _GoalsTabState extends State<GoalsTab> {
                 case 'archived':
                   setState(() => _showArchived = !_showArchived);
                   _load();
+                case 'backup':
+                  _copyBackup();
               }
             },
             itemBuilder: (_) => [
@@ -112,6 +110,7 @@ class _GoalsTabState extends State<GoalsTab> {
                     ? 'Hide archived objectives'
                     : 'Show archived objectives'),
               ),
+              const PopupMenuItem(value: 'backup', child: Text('Copy backup')),
             ],
           ),
         ],
@@ -145,6 +144,25 @@ class _GoalsTabState extends State<GoalsTab> {
                 ],
               ),
             ),
+    );
+  }
+
+  /// Puts the whole database on the clipboard as JSON, to paste anywhere that
+  /// isn't this phone.
+  ///
+  /// The clipboard rather than a share sheet or a file: it needs no dependency
+  /// and no platform wiring, and pasting into a note is already a backup. Says
+  /// how many rows went, because a silent copy gives no reason to believe it
+  /// worked.
+  Future<void> _copyBackup() async {
+    final data = await DBHelper().exportAll();
+    final rows = (data['tables'] as Map<String, dynamic>)
+        .values
+        .fold<int>(0, (n, t) => n + (t as List).length);
+    await Clipboard.setData(ClipboardData(text: jsonEncode(data)));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied $rows rows')),
     );
   }
 
@@ -369,7 +387,9 @@ class _GoalsTabState extends State<GoalsTab> {
   }
 
   /// An objective with exactly one key result, as one row: the KR's title, its
-  /// value and its bar. No chevron — there is nothing left to expand.
+  /// value and its bar. No chevron — there is nothing left to expand — and no
+  /// slot held open where one would go: the row is titled with the key result,
+  /// so it sits on the same edge as every other key-result row.
   Widget _mergedRow(Map<String, dynamic> o, Map<String, dynamic> k) {
     final theme = Theme.of(context);
     final score = k['score'] as double?;
@@ -383,8 +403,6 @@ class _GoalsTabState extends State<GoalsTab> {
           padding: const EdgeInsets.fromLTRB(kGapXs, kGapSm, kGapXs, kGapSm),
           child: Row(
             children: [
-              // Empty chevron slot, so titles line up with expandable ones.
-              const SizedBox(width: 24 + kGapXs),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,7 +426,7 @@ class _GoalsTabState extends State<GoalsTab> {
                 ),
               ),
               const SizedBox(width: kGapSm),
-              KrValueCell(k),
+              KrValueCell(k, maxWidth: _kKrValueWidth),
             ],
           ),
         ),
@@ -435,10 +453,7 @@ class _GoalsTabState extends State<GoalsTab> {
           icon: Icons.drive_file_rename_outline,
           label: 'Rename objective',
           onTap: () => _renameObjective(o)),
-      SheetAction(
-          icon: Icons.flag_outlined,
-          label: 'Close quarter · grade + renew',
-          onTap: () => _closeQuarter(o)),
+      ..._closeOrReopen(o),
       SheetAction(
           icon: Icons.delete_outline,
           label: 'Delete',
@@ -455,16 +470,45 @@ class _GoalsTabState extends State<GoalsTab> {
           icon: Icons.drive_file_rename_outline,
           label: 'Rename',
           onTap: () => _renameObjective(o)),
-      SheetAction(
-          icon: Icons.flag_outlined,
-          label: 'Close quarter · grade + renew',
-          onTap: () => _closeQuarter(o)),
+      ..._closeOrReopen(o),
       SheetAction(
           icon: Icons.delete_outline,
           label: 'Delete',
           destructive: true,
           onTap: () => _confirmDeleteObjective(o)),
     ]);
+  }
+
+  /// Closing a quarter archives the objective and clones it into the next one,
+  /// so offering it again on the archive would mint a second copy. An archived
+  /// objective gets the way back instead.
+  List<SheetAction> _closeOrReopen(Map<String, dynamic> o) {
+    if (o['status'] == 'archived') {
+      return [
+        SheetAction(
+            icon: Icons.unarchive_outlined,
+            label: 'Reopen',
+            onTap: () => _setObjectiveStatus(o, 'active')),
+      ];
+    }
+    return [
+      SheetAction(
+          icon: Icons.flag_outlined,
+          label: 'Close quarter · grade + renew',
+          onTap: () => _closeQuarter(o)),
+      SheetAction(
+          icon: Icons.archive_outlined,
+          label: 'Archive without grading',
+          onTap: () => _setObjectiveStatus(o, 'archived')),
+    ];
+  }
+
+  Future<void> _setObjectiveStatus(
+      Map<String, dynamic> o, String status) async {
+    await DBHelper().updateObjectiveStatus(o['id'], status);
+    // Reopening while the archive is hidden would drop the row out of sight;
+    // archiving while it's hidden is the point.
+    _load();
   }
 
   Future<void> _renameObjective(Map<String, dynamic> o) async {
@@ -500,21 +544,13 @@ class _GoalsTabState extends State<GoalsTab> {
 
   // ---------- Key results ----------
 
-  /// The indented child block: a hairline guide plus the objective's key
-  /// results. No add button here either — long-press the objective.
+  /// The objective's key results, at the same left edge as everything else. No
+  /// add button here either — long-press the objective.
   Widget _krBlock(Map<String, dynamic> o) {
-    final theme = Theme.of(context);
     final krs = (o['key_results'] as List).cast<Map<String, dynamic>>();
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(left: _kGuideX, bottom: kGapSm),
-      // The 1px rule itself eats a pixel of the inset.
-      padding: const EdgeInsets.only(left: _kKrIndent - _kGuideX - 1),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-      ),
+      margin: const EdgeInsets.only(bottom: kGapSm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -537,7 +573,7 @@ class _GoalsTabState extends State<GoalsTab> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: kTapTarget),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, kGapSm, kGapXs, kGapSm),
+          padding: const EdgeInsets.fromLTRB(kGapXs, kGapSm, kGapXs, kGapSm),
           child: Row(
             children: [
               Expanded(
@@ -558,7 +594,7 @@ class _GoalsTabState extends State<GoalsTab> {
                 ),
               ),
               const SizedBox(width: kGapSm),
-              KrValueCell(k),
+              KrValueCell(k, maxWidth: _kKrValueWidth),
             ],
           ),
         ),

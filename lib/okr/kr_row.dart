@@ -12,7 +12,12 @@ import 'log_value.dart';
 class KrValueCell extends StatelessWidget {
   final Map<String, dynamic> kr;
 
-  const KrValueCell(this.kr, {super.key});
+  /// How much width the number may claim. The tree passes less than the default
+  /// because there it shares a row with a title; the detail screen, which has
+  /// the row to itself, takes the default.
+  final double maxWidth;
+
+  const KrValueCell(this.kr, {super.key, this.maxWidth = 140});
 
   @override
   Widget build(BuildContext context) {
@@ -23,8 +28,8 @@ class KrValueCell extends StatelessWidget {
         : '${currentLabel(kr)} $unit';
     final delta = krDelta(kr);
     return ConstrainedBox(
-      // Fits "30 / 500 reps · 3x10"; longer text scales down.
-      constraints: const BoxConstraints(maxWidth: 140),
+      // 140 fits "30 / 500 reps · 3x10"; longer text scales down.
+      constraints: BoxConstraints(maxWidth: maxWidth),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,

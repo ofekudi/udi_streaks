@@ -43,6 +43,29 @@ class _HabitHistoryDialogState extends State<HabitHistoryDialog> {
     setState(() => _history = history);
   }
 
+  /// Long-press a day to take it off, mirroring how an OKR entry is deleted.
+  /// Needed because the tile's toggle only reaches today.
+  void _dayMenu(String date) {
+    showActionSheet(
+      context,
+      title: date,
+      actions: [
+        SheetAction(
+          icon: Icons.delete_outline,
+          label: 'Delete this day',
+          destructive: true,
+          onTap: () => _deleteDay(date),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteDay(String date) async {
+    await DBHelper().deleteCompletionOn(_habitId, DateTime.parse(date));
+    await widget.onChanged();
+    await _load();
+  }
+
   Future<void> _reportRetroactively() async {
     final picked = await showDatePicker(
       context: context,
@@ -87,9 +110,9 @@ class _HabitHistoryDialogState extends State<HabitHistoryDialog> {
             ),
             title: Text(
               _history[index]['date'],
-              style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
             ),
+            onLongPress: () => _dayMenu(_history[index]['date'] as String),
           ),
         ),
       ),

@@ -32,7 +32,7 @@ core/ + *_rules/scoring/rollup/period    pure domain logic
 ```
 
 The OKR tab is **one screen**: `okr/okr_tree.dart` renders areas → objectives →
-key results as an indented accordion. Areas are headings, not destinations;
+key results as an accordion. Areas are headings, not destinations;
 objectives are the only expand/collapse level. There is no per-area or
 per-objective screen — entity actions live on long-press (`showActionSheet`),
 including adding a child ("Add objective" on an area, "Add key result" on an
@@ -52,7 +52,17 @@ bar alone; `fmtScore` is only used by the quarter-close screen.
 That row lives in `okr/kr_row.dart`: `KrValueCell` is the `X / Y` column the tree
 and the detail screen share, and `KrSummaryRow` is the whole row, which is how
 `KrDetailScreen` opens — the same shape the tree row you tapped had, so the
-number can't read differently on the two screens.
+number can't read differently on the two screens. The tree passes `KrValueCell` a
+narrower `maxWidth` than the detail screen's default, because there the number
+shares its row with a title; it scales the text down rather than wrapping.
+
+**Nothing in the tree is indented.** Every row — area heading, objective, key
+result, merged row — starts at `kGapXs`; only an objective's chevron pushes its
+own title in to 32. A key-result indent left 136dp of title on a 360dp phone and
+wrapped ordinary titles onto two lines, and it said nothing the accordion and the
+type weights don't already say (objective `titleSmall` w700, key result
+`bodyMedium` w600 with its number alongside). Don't reintroduce a level indent or
+a guide rule to mark the hierarchy.
 Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
 `QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
 most-recently-logged-first capture list). Measurement writes go through
@@ -79,6 +89,27 @@ deliberately, and an entry a habit produced is removed by deleting *that
 completion* so the cascade takes the count — the tick and the count are one fact,
 and the sheet's label says the habit gets un-ticked rather than reporting it
 after. It returns whether a completion went with it.
+
+**Anything recorded can be un-recorded**, since nothing here is worth keeping by
+accident. Long-press deletes an OKR entry (above), and a day in
+`HabitHistoryDialog` — `deleteCompletionOn` takes it by date, because a
+completion *is* a day: both write paths refuse a second one for the same day.
+That dialog is the only way to reach a day that isn't today; the tile's toggle
+can't. An archived objective can be reopened from its long-press sheet, which is
+also where "Close quarter" is *withheld* once archived — closing clones into the
+next quarter, so offering it twice would mint a second copy.
+
+`reviews` has no foreign key, deliberately: a grade has to outlive the objective
+`renewObjective` archives. That means nothing reclaims a grade when its subject is
+genuinely deleted, so `_deleteReviewsUnder` does, running before the parent delete
+while the subtree is still there to find. Add a level to the hierarchy and it
+needs a branch there.
+
+`exportAll` dumps every table as JSON, copied to the clipboard from the OKR tab's
+overflow menu — with no account and no backend, that is the only way data leaves
+the phone. Raw rows on purpose: nothing is computed, so the tables *are* the
+state. A new table must be added to `DBHelper.exportedTables`, which
+`test/export_test.dart` enforces against the live schema. There is no import yet.
 
 A habit can **feed a COUNT key result**: ticking the habit also counts there.
 The link is offered on the habit side only — `habit_detail_sheet.dart` gains
