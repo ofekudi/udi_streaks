@@ -37,7 +37,9 @@ objectives are the only expand/collapse level. There is no per-area or
 per-objective screen — entity actions live on long-press (`showActionSheet`),
 including adding a child ("Add objective" on an area, "Add key result" on an
 objective), so no row carries a permanent add affordance. `InlineAddField`
-survives only for "Add area", once, at the bottom of the list.
+survives at the bottom of a list, once per tab: "Add area" on the OKR tree and
+"Add streak" on the habits list (where the picked emoji is prefixed onto the
+name — habits have no icon column).
 
 Every level can be **reordered** the same way: a "Reorder" action on the
 long-press sheet (shown only when the row has siblings) opens `showReorderSheet`
@@ -70,7 +72,10 @@ type weights don't already say (objective `titleSmall` w700, key result
 a guide rule to mark the hierarchy.
 Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
 `QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
-most-recently-logged-first capture list). Measurement writes go through
+most-recently-logged-first capture list). Both tabs carry that FAB; backing out
+of the Record page lands on the OKR tab with the last-logged key result's
+objective expanded (`RecordScreen.onLogged` → `GoalsTabState.reveal`), and
+stays put when nothing was logged. Measurement writes go through
 `okr/log_value.dart` so the Record page and KR detail can't drift apart — the
 one exception is `DBHelper._insertCompletion`, below.
 
@@ -122,7 +127,9 @@ The link is offered on the habit side only — `habit_detail_sheet.dart` gains
 The OKR tab shows no sign of it and needs none; a linked key result just
 receives measurements from a second source. Don't add an affordance for it
 there. Habits still import nothing from `okr/` — they reach the OKR tables
-through `DBHelper`, which sits below both.
+through `DBHelper`, which sits below both. That is also why the habits tab's
+"Record" FAB is an injected callback: `RootNav` brokers the push and the
+landing, since `main.dart` sits above both modules.
 
 **Nothing computed is ever stored.** Streaks, KR scores, pace and rollups are
 folded from the log on every read. Those rules live in pure functions that take

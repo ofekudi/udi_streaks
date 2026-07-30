@@ -16,7 +16,12 @@ import 'widget_sync.dart';
 class HabitsScreen extends StatefulWidget {
   final String title;
 
-  const HabitsScreen({super.key, required this.title});
+  /// The Record FAB's action, injected by the nav shell: the capture page it
+  /// pushes lives in okr/, which habits/ doesn't import.
+  final Future<void> Function() onRecord;
+
+  const HabitsScreen(
+      {super.key, required this.title, required this.onRecord});
 
   @override
   State<HabitsScreen> createState() => HabitsScreenState();
@@ -27,6 +32,10 @@ class HabitsScreenState extends State<HabitsScreen>
   static const _sync = WidgetSync();
 
   List<Map<String, dynamic>> _habits = [];
+
+  /// Emoji for the habit being typed — null until picked, so the well shows a
+  /// greyed placeholder. Prefixed onto the name: habits have no icon column.
+  String? _newHabitEmoji;
 
   @override
   void initState() {
@@ -64,10 +73,6 @@ class HabitsScreenState extends State<HabitsScreen>
       await DBHelper().toggleHabitCompletion(habit['id']);
     }
     await reload();
-  }
-
-  Future<void> _add() async {
-    if (await addHabitFlow(context)) await reload();
   }
 
   Future<void> _open(Map<String, dynamic> habit) async {
@@ -144,6 +149,32 @@ class HabitsScreenState extends State<HabitsScreen>
     await reload();
   }
 
+  /// The 48x48 emoji well next to the "Add streak" field.
+  Widget _emojiButton() {
+    return InkWell(
+      onTap: () async {
+        final emoji = await pickEmoji(context);
+        if (emoji != null) setState(() => _newHabitEmoji = emoji);
+      },
+      child: Container(
+        width: kTapTarget,
+        height: kTapTarget,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          borderRadius: BorderRadius.circular(kGapXs),
+        ),
+        child: Text(
+          _newHabitEmoji ?? '😊',
+          style: TextStyle(
+            fontSize: 22,
+            color: _newHabitEmoji == null ? Colors.grey : null,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,33 +182,50 @@ class HabitsScreenState extends State<HabitsScreen>
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
       ),
-      body: _habits.isEmpty
-          ? const Center(
-              child: Text('No habits yet'),
-            )
-          : ListView.separated(
-              itemCount: _habits.length,
-              separatorBuilder: (context, _) => Divider(
+      body: ListView(
+        children: [
+          for (var i = 0; i < _habits.length; i++) ...[
+            if (i > 0)
+              Divider(
                 height: 1,
                 thickness: 0.5,
-                color:
-                    Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                color: Theme.of(context)
+                    .colorScheme
+                    .outline
+                    .withValues(alpha: 0.2),
                 indent: 72,
               ),
-              itemBuilder: (context, index) {
-                final habit = _habits[index];
-                return HabitTile(
-                  habit: habit,
-                  onToggle: () => _toggle(habit),
-                  onOpen: () => _open(habit),
-                );
+            HabitTile(
+              habit: _habits[i],
+              onToggle: () => _toggle(_habits[i]),
+              onOpen: () => _open(_habits[i]),
+            ),
+          ],
+          const SizedBox(height: kGapMd),
+          Padding(
+            // The tiles are full-bleed; the field isn't.
+            padding: const EdgeInsets.symmetric(horizontal: kGapMd),
+            child: InlineAddField(
+              label: 'Add streak',
+              hint: 'Type something here',
+              leading: _emojiButton(),
+              onSubmit: (name) async {
+                await DBHelper().insertHabit(
+                    _newHabitEmoji == null ? name : '$_newHabitEmoji $name');
+                _newHabitEmoji = null;
+                await reload();
               },
             ),
-      floatingActionButton: FloatingActionButton(
+          ),
+          // Room to scroll the last row clear of the FAB.
+          const SizedBox(height: 80),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
         heroTag: 'habits_fab',
-        onPressed: _add,
-        tooltip: 'Add Habit',
-        child: const Icon(Icons.add),
+        onPressed: widget.onRecord,
+        icon: const Icon(Icons.add),
+        label: const Text('Record'),
       ),
     );
   }

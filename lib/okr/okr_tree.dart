@@ -170,10 +170,23 @@ class GoalsTabState extends State<GoalsTab> {
     );
   }
 
+  /// Expands one objective and reloads — the landing move after a Record
+  /// session. The write must precede the reload, which re-seeds [_collapsed]
+  /// from the rows. Public so the nav shell can land here from another tab.
+  Future<void> reveal(String? objectiveId) async {
+    if (objectiveId != null) {
+      await DBHelper().setObjectiveCollapsed(objectiveId, false);
+    }
+    await reload();
+  }
+
   Future<void> _openRecord() async {
+    Map<String, dynamic>? last;
     await Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const RecordScreen()));
-    reload();
+        context,
+        MaterialPageRoute(
+            builder: (_) => RecordScreen(onLogged: (k) => last = k)));
+    await reveal(last?['objective_id'] as String?);
   }
 
   // ---------- Areas ----------

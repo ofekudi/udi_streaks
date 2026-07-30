@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../db_helper.dart';
-import '../ui/kit.dart';
-
 /// A single-field name dialog, used for renaming a habit.
 ///
 /// Returns the name as typed — deliberately not trimmed, matching the
@@ -24,20 +21,6 @@ Future<String?> promptHabitName(
       hint: hint,
     ),
   );
-}
-
-/// The "start a new streak" flow: pick an emoji, name the habit, save.
-///
-/// Returns true when a habit was created. The emoji is prefixed onto the name
-/// because habits have no icon column — unlike OKR areas, which do.
-Future<bool> addHabitFlow(BuildContext context) async {
-  final name = await showDialog<String>(
-    context: context,
-    builder: (_) => const _AddHabitDialog(),
-  );
-  if (name == null) return false;
-  await DBHelper().insertHabit(name);
-  return true;
 }
 
 class _NameDialog extends StatefulWidget {
@@ -92,80 +75,3 @@ class _NameDialogState extends State<_NameDialog> {
   }
 }
 
-class _AddHabitDialog extends StatefulWidget {
-  const _AddHabitDialog();
-
-  @override
-  State<_AddHabitDialog> createState() => _AddHabitDialogState();
-}
-
-class _AddHabitDialogState extends State<_AddHabitDialog> {
-  final _controller = TextEditingController();
-
-  /// Null until the user picks one — the placeholder renders greyed out.
-  String? _emoji;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pick() async {
-    final picked = await pickEmoji(context);
-    if (picked == null || !mounted) return;
-    setState(() => _emoji = picked);
-  }
-
-  /// Matches the original: "Done" always closes the dialog, and only a
-  /// non-empty name is actually saved.
-  void _submit() {
-    final text = _controller.text;
-    Navigator.of(context)
-        .pop(text.isEmpty ? null : (_emoji == null ? text : '$_emoji $text'));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Start a new streak!'),
-      content: Row(
-        children: [
-          GestureDetector(
-            onTap: _pick,
-            child: Container(
-              padding: const EdgeInsets.all(kGapSm),
-              margin: const EdgeInsets.only(right: kGapSm),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(kGapSm),
-                border: Border.all(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outline
-                      .withValues(alpha: 0.2),
-                ),
-              ),
-              child: Text(
-                _emoji ?? '😊',
-                style: TextStyle(
-                  fontSize: 24,
-                  color: _emoji == null ? Colors.grey : null,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              decoration:
-                  const InputDecoration(hintText: 'Type something here'),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: _submit, child: const Text('Done')),
-      ],
-    );
-  }
-}

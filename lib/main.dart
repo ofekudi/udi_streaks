@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'habits/habits_screen.dart';
 import 'okr/okr_screens.dart';
 import 'okr/okr_tree.dart';
+import 'okr/record_screen.dart';
 
 void main() {
   // sqflite and home_widget both reach for the binding, so make sure it is up
@@ -46,10 +47,29 @@ class _RootNavState extends State<RootNav> {
   final _historyKey = GlobalKey<HistoryTabState>();
 
   late final _tabs = [
-    HabitsScreen(key: _habitsKey, title: 'Never Miss Twice'),
+    HabitsScreen(
+        key: _habitsKey, title: 'Never Miss Twice', onRecord: _recordFromHabits),
     GoalsTab(key: _goalsKey),
     HistoryTab(key: _historyKey),
   ];
+
+  /// The Habits tab's Record FAB. The shell brokers it — pushing the OKR
+  /// capture page and landing on the OKR tab afterwards — so habits/ keeps
+  /// importing nothing from okr/. Not routed through [_select], whose reload
+  /// [reveal] already covers.
+  Future<void> _recordFromHabits() async {
+    Map<String, dynamic>? last;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => RecordScreen(onLogged: (k) => last = k)));
+    // A Record session can delete a habit-produced measurement, and the
+    // cascade un-ticks the habit.
+    _habitsKey.currentState?.reload();
+    if (last == null) return;
+    setState(() => _index = 1);
+    await _goalsKey.currentState?.reveal(last!['objective_id'] as String?);
+  }
 
   void _select(int i) {
     if (i == _index) return; // re-tapping the open tab: pull-to-refresh covers it

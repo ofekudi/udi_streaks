@@ -62,7 +62,13 @@ List<Map<String, dynamic>> inStoredOrder(
 /// you open this you already know what you're logging, and the thing you log
 /// daily should be at the top. Reviewing the hierarchy is the tree's job.
 class RecordScreen extends StatefulWidget {
-  const RecordScreen({super.key});
+  /// Fired on every successful log with the row that took it, so the caller
+  /// can land on what was recorded. A pop result can't carry this — the system
+  /// back gesture pops with null. Logs made deeper in, on [KrDetailScreen],
+  /// don't report; this is the capture list's own ledger.
+  final void Function(Map<String, dynamic> kr)? onLogged;
+
+  const RecordScreen({super.key, this.onLogged});
   @override
   State<RecordScreen> createState() => _RecordScreenState();
 }
@@ -123,6 +129,7 @@ class _RecordScreenState extends State<RecordScreen> {
 
   Future<void> _bump(Map<String, dynamic> k) async {
     await bumpKr(k);
+    widget.onLogged?.call(k);
     _load();
   }
 
@@ -135,6 +142,7 @@ class _RecordScreenState extends State<RecordScreen> {
       }
       return;
     }
+    widget.onLogged?.call(k);
     _entry.clear();
     if (mounted) {
       setState(() => _logOpenFor = null);
