@@ -39,11 +39,30 @@ class RootNav extends StatefulWidget {
 class _RootNavState extends State<RootNav> {
   int _index = 0;
 
-  final _tabs = const [
-    HabitsScreen(title: 'Never Miss Twice'),
-    GoalsTab(),
-    HistoryTab(),
+  // The IndexedStack keeps every tab's State alive, so a write on one tab
+  // never reaches its siblings' one-shot loads. Entering a tab reloads it.
+  final _habitsKey = GlobalKey<HabitsScreenState>();
+  final _goalsKey = GlobalKey<GoalsTabState>();
+  final _historyKey = GlobalKey<HistoryTabState>();
+
+  late final _tabs = [
+    HabitsScreen(key: _habitsKey, title: 'Never Miss Twice'),
+    GoalsTab(key: _goalsKey),
+    HistoryTab(key: _historyKey),
   ];
+
+  void _select(int i) {
+    if (i == _index) return; // re-tapping the open tab: pull-to-refresh covers it
+    setState(() => _index = i);
+    switch (i) {
+      case 0:
+        _habitsKey.currentState?.reload();
+      case 1:
+        _goalsKey.currentState?.reload();
+      case 2:
+        _historyKey.currentState?.reload();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +70,7 @@ class _RootNavState extends State<RootNav> {
       body: IndexedStack(index: _index, children: _tabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: _select,
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.check_circle_outline),

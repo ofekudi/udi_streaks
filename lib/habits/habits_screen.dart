@@ -19,10 +19,10 @@ class HabitsScreen extends StatefulWidget {
   const HabitsScreen({super.key, required this.title});
 
   @override
-  State<HabitsScreen> createState() => _HabitsScreenState();
+  State<HabitsScreen> createState() => HabitsScreenState();
 }
 
-class _HabitsScreenState extends State<HabitsScreen>
+class HabitsScreenState extends State<HabitsScreen>
     with WidgetsBindingObserver {
   static const _sync = WidgetSync();
 
@@ -32,7 +32,7 @@ class _HabitsScreenState extends State<HabitsScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _refresh();
+    reload();
   }
 
   @override
@@ -49,7 +49,8 @@ class _HabitsScreenState extends State<HabitsScreen>
   }
 
   /// Reloads the list and pushes the new counts to the home-screen widget.
-  Future<void> _refresh() async {
+  /// Public so the nav shell can reload the tab on entry.
+  Future<void> reload() async {
     final habits = await DBHelper().getHabits();
     if (mounted) setState(() => _habits = habits);
     await _sync.push();
@@ -62,11 +63,11 @@ class _HabitsScreenState extends State<HabitsScreen>
     } else {
       await DBHelper().toggleHabitCompletion(habit['id']);
     }
-    await _refresh();
+    await reload();
   }
 
   Future<void> _add() async {
-    if (await addHabitFlow(context)) await _refresh();
+    if (await addHabitFlow(context)) await reload();
   }
 
   Future<void> _open(Map<String, dynamic> habit) async {
@@ -78,15 +79,15 @@ class _HabitsScreenState extends State<HabitsScreen>
         await _rename(habit);
       case HabitAction.toggleComplete:
         await DBHelper().toggleHabitCompletion(habit['id']);
-        await _refresh();
+        await reload();
       case HabitAction.toggleSkip:
         await DBHelper().toggleHabitSkip(habit['id']);
-        await _refresh();
+        await reload();
       case HabitAction.link:
         await _link(habit);
       case HabitAction.unlink:
         await DBHelper().unlinkHabit(habit['id']);
-        await _refresh();
+        await reload();
       case HabitAction.history:
         await _showHistory(habit);
       case HabitAction.delete:
@@ -102,7 +103,7 @@ class _HabitsScreenState extends State<HabitsScreen>
     final krId = await showLinkKrSheet(context, krs, habitId: habit['id']);
     if (krId == null) return;
     await DBHelper().linkHabitToKeyResult(habit['id'], krId);
-    await _refresh();
+    await reload();
   }
 
   Future<void> _rename(Map<String, dynamic> habit) async {
@@ -115,7 +116,7 @@ class _HabitsScreenState extends State<HabitsScreen>
     );
     if (name == null) return;
     await DBHelper().updateHabitName(habit['id'], name);
-    await _refresh();
+    await reload();
   }
 
   Future<void> _showHistory(Map<String, dynamic> habit) async {
@@ -127,7 +128,7 @@ class _HabitsScreenState extends State<HabitsScreen>
       builder: (_) => HabitHistoryDialog(
         habit: habit,
         initialHistory: history,
-        onChanged: _refresh,
+        onChanged: reload,
       ),
     );
   }
@@ -140,7 +141,7 @@ class _HabitsScreenState extends State<HabitsScreen>
     );
     if (!ok) return;
     await DBHelper().deleteHabit(habit['id']);
-    await _refresh();
+    await reload();
   }
 
   @override

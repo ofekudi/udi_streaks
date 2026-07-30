@@ -693,20 +693,21 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
 class HistoryTab extends StatefulWidget {
   const HistoryTab({super.key});
   @override
-  State<HistoryTab> createState() => _HistoryTabState();
+  State<HistoryTab> createState() => HistoryTabState();
 }
 
-class _HistoryTabState extends State<HistoryTab> {
+class HistoryTabState extends State<HistoryTab> {
   List<Map<String, dynamic>> _krs = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    reload();
   }
 
-  Future<void> _load() async {
+  /// Public so the nav shell can reload the tab on entry.
+  Future<void> reload() async {
     final krs = await DBHelper().getAllKeyResultsWithProgress();
     if (!mounted) return;
     setState(() {
@@ -731,7 +732,7 @@ class _HistoryTabState extends State<HistoryTab> {
                   child: Text('Nothing to show yet'),
                 ))
               : RefreshIndicator(
-                  onRefresh: _load,
+                  onRefresh: reload,
                   child: ListView(
                     padding: kListPadding,
                     children: [
@@ -747,7 +748,7 @@ class _HistoryTabState extends State<HistoryTab> {
                               context,
                               MaterialPageRoute(
                                   builder: (_) => KrDetailScreen(kr: k)),
-                            ).then((_) => _load()),
+                            ).then((_) => reload()),
                           ),
                         ),
                     ],

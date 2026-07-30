@@ -29,14 +29,14 @@ import 'record_screen.dart';
 class GoalsTab extends StatefulWidget {
   const GoalsTab({super.key});
   @override
-  State<GoalsTab> createState() => _GoalsTabState();
+  State<GoalsTab> createState() => GoalsTabState();
 }
 
 /// What a key result's number may claim, sharing its row with a title. Narrower
 /// than [KrValueCell]'s default, which the detail screen keeps.
 const double _kKrValueWidth = 110;
 
-class _GoalsTabState extends State<GoalsTab> {
+class GoalsTabState extends State<GoalsTab> {
   List<Map<String, dynamic>> _areas = [];
   bool _loading = true;
   bool _showArchived = false;
@@ -52,10 +52,11 @@ class _GoalsTabState extends State<GoalsTab> {
   @override
   void initState() {
     super.initState();
-    _load();
+    reload();
   }
 
-  Future<void> _load() async {
+  /// Public so the nav shell can reload the tab on entry.
+  Future<void> reload() async {
     final areas =
         await DBHelper().getAreasWithRollup(includeArchived: _showArchived);
     if (!mounted) return;
@@ -95,7 +96,7 @@ class _GoalsTabState extends State<GoalsTab> {
                   setState(() => _collapsed.addAll(_allObjectiveIds));
                 case 'archived':
                   setState(() => _showArchived = !_showArchived);
-                  _load();
+                  reload();
                 case 'backup':
                   _copyBackup();
               }
@@ -123,7 +124,7 @@ class _GoalsTabState extends State<GoalsTab> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _load,
+              onRefresh: reload,
               child: ListView(
                 padding: kListPadding,
                 children: [
@@ -136,7 +137,7 @@ class _GoalsTabState extends State<GoalsTab> {
                     onSubmit: (name) async {
                       await DBHelper().insertArea(name, icon: _newAreaEmoji);
                       _newAreaEmoji = '🎯';
-                      await _load();
+                      await reload();
                     },
                   ),
                   // Room to scroll the last row clear of the FAB.
@@ -169,7 +170,7 @@ class _GoalsTabState extends State<GoalsTab> {
   Future<void> _openRecord() async {
     await Navigator.push(
         context, MaterialPageRoute(builder: (_) => const RecordScreen()));
-    _load();
+    reload();
   }
 
   // ---------- Areas ----------
@@ -280,14 +281,14 @@ class _GoalsTabState extends State<GoalsTab> {
       start: p.start,
       end: p.end,
     );
-    _load();
+    reload();
   }
 
   Future<void> _changeAreaEmoji(Map<String, dynamic> a) async {
     final emoji = await pickEmoji(context);
     if (emoji == null) return;
     await DBHelper().updateArea(a['id'], icon: emoji);
-    _load();
+    reload();
   }
 
   Future<void> _renameArea(Map<String, dynamic> a) async {
@@ -295,7 +296,7 @@ class _GoalsTabState extends State<GoalsTab> {
         await promptText(context, title: 'Rename area', initial: a['name']);
     if (name != null && name.isNotEmpty) {
       await DBHelper().updateArea(a['id'], name: name);
-      _load();
+      reload();
     }
   }
 
@@ -306,7 +307,7 @@ class _GoalsTabState extends State<GoalsTab> {
             'Its objectives, key results and their measurements go too.');
     if (!ok) return;
     await DBHelper().deleteArea(a['id']);
-    _load();
+    reload();
   }
 
   // ---------- Objectives ----------
@@ -434,7 +435,7 @@ class _GoalsTabState extends State<GoalsTab> {
     await DBHelper().updateObjectiveStatus(o['id'], status);
     // Reopening while the archive is hidden would drop the row out of sight;
     // archiving while it's hidden is the point.
-    _load();
+    reload();
   }
 
   Future<void> _renameObjective(Map<String, dynamic> o) async {
@@ -442,7 +443,7 @@ class _GoalsTabState extends State<GoalsTab> {
         title: 'Rename objective', initial: o['title']);
     if (t != null && t.isNotEmpty) {
       await DBHelper().updateObjective(o['id'], title: t);
-      _load();
+      reload();
     }
   }
 
@@ -452,7 +453,7 @@ class _GoalsTabState extends State<GoalsTab> {
         message: 'Delete "${o['title']}" and its key results?');
     if (!ok) return;
     await DBHelper().deleteObjective(o['id']);
-    _load();
+    reload();
   }
 
   Future<void> _closeQuarter(Map<String, dynamic> o) async {
@@ -465,7 +466,7 @@ class _GoalsTabState extends State<GoalsTab> {
         ),
       ),
     );
-    _load();
+    reload();
   }
 
   // ---------- Key results ----------
@@ -531,7 +532,7 @@ class _GoalsTabState extends State<GoalsTab> {
   Future<void> _openKr(Map<String, dynamic> k) async {
     await Navigator.push(
         context, MaterialPageRoute(builder: (_) => KrDetailScreen(kr: k)));
-    _load();
+    reload();
   }
 
   Future<void> _addKr(Map<String, dynamic> o) async {
@@ -540,7 +541,7 @@ class _GoalsTabState extends State<GoalsTab> {
       MaterialPageRoute(
           builder: (_) => KrEditScreen(objectiveId: o['id'] as String)),
     );
-    if (created == true) _load();
+    if (created == true) reload();
   }
 
   void _krMenu(Map<String, dynamic> k) {
@@ -558,7 +559,7 @@ class _GoalsTabState extends State<GoalsTab> {
   Future<void> _editKr(Map<String, dynamic> k) async {
     final changed = await Navigator.push<bool>(
         context, MaterialPageRoute(builder: (_) => KrEditScreen(kr: k)));
-    if (changed == true) _load();
+    if (changed == true) reload();
   }
 
   Future<void> _confirmDeleteKr(Map<String, dynamic> k) async {
@@ -567,6 +568,6 @@ class _GoalsTabState extends State<GoalsTab> {
       return;
     }
     await DBHelper().deleteKeyResult(k['id']);
-    _load();
+    reload();
   }
 }
