@@ -129,15 +129,16 @@ and don't recompute a rule inline in a widget.
   name theirs `reload()`, public, because `RootNav` calls it on the tab being
   entered — the `IndexedStack` keeps sibling tabs alive across writes, so tab
   entry is what reloads them (`test/tab_reload_test.dart` pins this). UI-only
-  state (which objectives are collapsed, which Record row is open) lives in
-  `setState` and is never persisted.
+  state (which Record row is open, whether archived objectives show) lives in
+  `setState` and is never persisted — except which objectives are collapsed,
+  which is `objectives.collapsed` so the tree reopens the way it was left.
 - Spacing comes from `ui/kit.dart` (`kGapXs`=4 … `kGapXl`=24). Reuse
   `showActionSheet`, `confirmDelete`, `promptText`, `pickEmoji`,
   `InlineAddField`, `ScoreBar`.
 
 ## Schema
 
-Version 6, ten tables. `areas → objectives → key_results` is intent;
+Version 7, ten tables. `areas → objectives → key_results` is intent;
 `executions → measurements` is doing; `reviews` holds quarterly grades.
 `executions` and `trackables` exist but have no CRUD yet — leave them.
 `key_results.target_raw`, `key_results.baseline_raw` and `measurements.note`
@@ -157,6 +158,13 @@ zero each quarter by definition. `renewObjective` seeds the next quarter's
 baseline from the KR's last entry, so progressive goals need no rebuilding.
 New migrations go in `_onUpgrade` behind `if (oldVersion < N)`.
 
+`objectives.collapsed` is the accordion's fold state — user input, not a
+computed value, which is why it doesn't break the rule above. Its setters
+(`setObjectiveCollapsed`, `setObjectivesCollapsed`) skip `updated_at`: folding
+a row isn't an edit. The default 0 is what keeps a new or renewed objective
+expanded; `okr_tree.dart` seeds its `_collapsed` set from the rows on every
+`_load()`, so archived-but-hidden objectives keep their state in the DB.
+
 `key_results.habit_id` is the habit → COUNT key result link, at most one habit
 per KR and one KR per habit. Every path that completes a habit goes through
 `DBHelper._insertCompletion`, which writes the completion *and* mirrors it as one
@@ -169,8 +177,8 @@ the archived copy so the link doesn't end up claimed at both ends.
 
 Because the migrations and these cascades are SQLite behaviour rather than pure
 rules, they are tested against a real database via `sqflite_common_ffi` and
-`DBHelper.openAt` — see `test/habit_okr_link_test.dart` and
-`test/habit_link_migration_test.dart`, which declares the previous schema
+`DBHelper.openAt` — see `test/habit_okr_link_test.dart` and the
+`*_migration_test.dart` files, which declare the pre-migration schema
 verbatim because `_onCreate` always builds the current one.
 
 ## Keeping this file current

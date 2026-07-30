@@ -24,7 +24,7 @@ class DBHelper {
   }
 
   /// The current schema version. Also the version tests open at.
-  static const int schemaVersion = 6;
+  static const int schemaVersion = 7;
 
   /// Every table [exportAll] dumps. A new table has to be added here too, which
   /// `export_test.dart` enforces by comparing this against the live schema.
@@ -136,6 +136,12 @@ class DBHelper {
           'habit_completion_id TEXT REFERENCES habit_completions(id) '
           'ON DELETE CASCADE');
     }
+
+    // Version 7: the accordion remembers which objectives are folded.
+    if (oldVersion >= 3 && oldVersion < 7) {
+      await db.execute('ALTER TABLE objectives ADD COLUMN '
+          'collapsed INTEGER NOT NULL DEFAULT 0');
+    }
   }
 
   /// Creates the OKR layer: areas -> objectives -> key_results (intent),
@@ -162,6 +168,9 @@ class DBHelper {
         end_date TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'active',
         sort_order INTEGER NOT NULL DEFAULT 0,
+        -- Whether the tree shows this objective folded. UI state, but user
+        -- input rather than anything computed, so it lives with the row.
+        collapsed INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY(area_id) REFERENCES areas(id) ON DELETE CASCADE
@@ -818,6 +827,26 @@ class DBHelper {
     if (start != null) data['start_date'] = start.toIso8601String();
     if (end != null) data['end_date'] = end.toIso8601String();
     await db.update('objectives', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Folding a row isn't an edit to the objective, so `updated_at` stays put.
+  Future<void> setObjectiveCollapsed(String id, bool collapsed) async {
+    final db = await database;
+    await db.update('objectives', {'collapsed': collapsed ? 1 : 0},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Expand all / collapse all, in one statement.
+  Future<void> setObjectivesCollapsed(
+      Iterable<String> ids, bool collapsed) async {
+    final list = ids.toList();
+    if (list.isEmpty) return;
+    final db = await database;
+    final marks = List.filled(list.length, '?').join(', ');
+    await db.rawUpdate(
+      'UPDATE objectives SET collapsed = ? WHERE id IN ($marks)',
+      [collapsed ? 1 : 0, ...list],
+    );
   }
 
   Future<void> deleteObjective(String id) async {

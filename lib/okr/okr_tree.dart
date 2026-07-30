@@ -42,9 +42,10 @@ class GoalsTabState extends State<GoalsTab> {
   bool _showArchived = false;
   String _newAreaEmoji = '🎯';
 
-  /// Objectives the user has *closed*. Tracking the negative is what makes
-  /// "everything expanded on load" and "a new objective is expanded" fall out
-  /// for free — no reconciliation pass after an insert or a renew.
+  /// Objectives the user has *closed* — a mirror of `objectives.collapsed`,
+  /// seeded by [_load] and written back on every toggle so the tree reopens
+  /// the way it was left. The column defaults to 0, which is what keeps a new
+  /// or renewed objective expanded.
   final Set<String> _collapsed = {};
 
   bool _isExpanded(String id) => !_collapsed.contains(id);
@@ -60,16 +61,16 @@ class GoalsTabState extends State<GoalsTab> {
     final areas =
         await DBHelper().getAreasWithRollup(includeArchived: _showArchived);
     if (!mounted) return;
-    // Drop collapse state for objectives that no longer exist, so a delete or
-    // a renew can't leak it onto some future id.
-    final live = {
-      for (final a in areas)
-        for (final o in (a['objectives'] as List)) o['id'] as String,
-    };
     setState(() {
       _areas = areas;
       _loading = false;
-      _collapsed.retainWhere(live.contains);
+      _collapsed
+        ..clear()
+        ..addAll([
+          for (final a in areas)
+            for (final o in (a['objectives'] as List))
+              if (o['collapsed'] == 1) o['id'] as String,
+        ]);
     });
   }
 
@@ -92,8 +93,10 @@ class GoalsTabState extends State<GoalsTab> {
               switch (v) {
                 case 'expand':
                   setState(_collapsed.clear);
+                  DBHelper().setObjectivesCollapsed(_allObjectiveIds, false);
                 case 'collapse':
                   setState(() => _collapsed.addAll(_allObjectiveIds));
+                  DBHelper().setObjectivesCollapsed(_allObjectiveIds, true);
                 case 'archived':
                   setState(() => _showArchived = !_showArchived);
                   reload();
@@ -332,10 +335,11 @@ class GoalsTabState extends State<GoalsTab> {
     final score = o['score'] as double?;
     final archived = o['status'] == 'archived';
     return InkWell(
-      onTap: () => setState(() {
+      onTap: () {
         final id = o['id'] as String;
-        open ? _collapsed.add(id) : _collapsed.remove(id);
-      }),
+        setState(() => open ? _collapsed.add(id) : _collapsed.remove(id));
+        DBHelper().setObjectiveCollapsed(id, open);
+      },
       onLongPress: () => _objectiveMenu(o),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: kTapTarget),
