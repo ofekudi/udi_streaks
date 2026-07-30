@@ -312,10 +312,6 @@ class _GoalsTabState extends State<GoalsTab> {
   // ---------- Objectives ----------
 
   List<Widget> _objectiveSection(Map<String, dynamic> o) {
-    final krs = (o['key_results'] as List).cast<Map<String, dynamic>>();
-    // Presentation only: the objective still exists and still gets graded, and
-    // a second key result unfolds it back into a parent with children.
-    if (krs.length == 1) return [_mergedRow(o, krs.single)];
     final open = _isExpanded(o['id'] as String);
     return [
       _objectiveRow(o, open),
@@ -386,81 +382,11 @@ class _GoalsTabState extends State<GoalsTab> {
     );
   }
 
-  /// An objective with exactly one key result, as one row: the KR's title, its
-  /// value and its bar. No chevron — there is nothing left to expand — and no
-  /// slot held open where one would go: the row is titled with the key result,
-  /// so it sits on the same edge as every other key-result row.
-  Widget _mergedRow(Map<String, dynamic> o, Map<String, dynamic> k) {
-    final theme = Theme.of(context);
-    final score = k['score'] as double?;
-    final archived = o['status'] == 'archived';
-    return InkWell(
-      onTap: () => _openKr(k),
-      onLongPress: () => _mergedMenu(o, k),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: kTapTarget),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(kGapXs, kGapSm, kGapXs, kGapSm),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(k['title'],
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: archived
-                              ? theme.colorScheme.onSurfaceVariant
-                              : null,
-                        )),
-                    if (archived) _archivedLabel(),
-                    if (k['target'] != null) ...[
-                      const SizedBox(height: kGapXs),
-                      ScoreBar(score ?? 0, down: krWantsDown(k)),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: kGapSm),
-              KrValueCell(k, maxWidth: _kKrValueWidth),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _archivedLabel() => Text('archived',
       style: Theme.of(context)
           .textTheme
           .labelSmall
           ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant));
-
-  /// Both entities' actions in one sheet, since the row stands for both.
-  void _mergedMenu(Map<String, dynamic> o, Map<String, dynamic> k) {
-    showActionSheet(context, title: k['title'], actions: [
-      SheetAction(
-          icon: Icons.edit_outlined,
-          label: 'Edit key result',
-          onTap: () => _editKr(k)),
-      SheetAction(
-          icon: Icons.add, label: 'Add key result', onTap: () => _addKr(o)),
-      SheetAction(
-          icon: Icons.drive_file_rename_outline,
-          label: 'Rename objective',
-          onTap: () => _renameObjective(o)),
-      ..._closeOrReopen(o),
-      SheetAction(
-          icon: Icons.delete_outline,
-          label: 'Delete',
-          destructive: true,
-          onTap: () => _confirmDeleteObjective(o)),
-    ]);
-  }
 
   void _objectiveMenu(Map<String, dynamic> o) {
     showActionSheet(context, title: o['title'], actions: [

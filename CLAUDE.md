@@ -39,12 +39,6 @@ including adding a child ("Add objective" on an area, "Add key result" on an
 objective), so no row carries a permanent add affordance. `InlineAddField`
 survives only for "Add area", once, at the bottom of the list.
 
-An objective with **exactly one key result collapses into a single row**
-(`_mergedRow`) titled with the *key result* — the objective title and the KR
-title otherwise say the same thing twice over five rows. It's presentation only:
-the objective still exists, still rolls up, still gets graded at quarter close,
-and its long-press sheet carries both entities' actions. Adding a second key
-result unfolds it back into a chevron row with children, for free.
 Every row is at most two lines — title, then a `ScoreBar` — and the only number
 in the tree is a key result's `X / Y`, in a right-hand column beside both lines
 so the title keeps its own line. Objectives and areas show their rollup as the
@@ -57,7 +51,7 @@ narrower `maxWidth` than the detail screen's default, because there the number
 shares its row with a title; it scales the text down rather than wrapping.
 
 **Nothing in the tree is indented.** Every row — area heading, objective, key
-result, merged row — starts at `kGapXs`; only an objective's chevron pushes its
+result — starts at `kGapXs`; only an objective's chevron pushes its
 own title in to 32. A key-result indent left 136dp of title on a 360dp phone and
 wrapped ordinary titles onto two lines, and it said nothing the accordion and the
 type weights don't already say (objective `titleSmall` w700, key result
