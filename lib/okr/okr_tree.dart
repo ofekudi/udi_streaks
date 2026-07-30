@@ -245,12 +245,27 @@ class GoalsTabState extends State<GoalsTab> {
           icon: Icons.drive_file_rename_outline,
           label: 'Rename',
           onTap: () => _renameArea(a)),
+      if (_areas.length > 1)
+        SheetAction(
+            icon: Icons.swap_vert,
+            label: 'Reorder areas',
+            onTap: _reorderAreas),
       SheetAction(
           icon: Icons.delete_outline,
           label: 'Delete',
           destructive: true,
           onTap: () => _confirmDeleteArea(a)),
     ]);
+  }
+
+  Future<void> _reorderAreas() async {
+    final ids = await showReorderSheet(context, title: 'Reorder areas', entries: [
+      for (final a in _areas)
+        (a['id'] as String, '${a['icon'] ?? '🎯'}  ${a['name']}'),
+    ]);
+    if (ids == null) return;
+    await DBHelper().reorderAreas(ids);
+    reload();
   }
 
   /// The 48x48 emoji well next to the "Add area" field.
@@ -393,6 +408,13 @@ class GoalsTabState extends State<GoalsTab> {
           .labelSmall
           ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant));
 
+  /// The objectives shown beside [o] — its area's list as loaded, so with the
+  /// archive hidden a reorder renumbers only the visible rows.
+  List<Map<String, dynamic>> _objectiveSiblings(Map<String, dynamic> o) {
+    final area = _areas.firstWhere((a) => a['id'] == o['area_id']);
+    return (area['objectives'] as List).cast<Map<String, dynamic>>();
+  }
+
   void _objectiveMenu(Map<String, dynamic> o) {
     showActionSheet(context, title: o['title'], actions: [
       SheetAction(
@@ -401,6 +423,11 @@ class GoalsTabState extends State<GoalsTab> {
           icon: Icons.drive_file_rename_outline,
           label: 'Rename',
           onTap: () => _renameObjective(o)),
+      if (_objectiveSiblings(o).length > 1)
+        SheetAction(
+            icon: Icons.swap_vert,
+            label: 'Reorder objectives',
+            onTap: () => _reorderObjectives(o)),
       ..._closeOrReopen(o),
       SheetAction(
           icon: Icons.delete_outline,
@@ -408,6 +435,17 @@ class GoalsTabState extends State<GoalsTab> {
           destructive: true,
           onTap: () => _confirmDeleteObjective(o)),
     ]);
+  }
+
+  Future<void> _reorderObjectives(Map<String, dynamic> o) async {
+    final ids =
+        await showReorderSheet(context, title: 'Reorder objectives', entries: [
+      for (final s in _objectiveSiblings(o))
+        (s['id'] as String, s['title'] as String),
+    ]);
+    if (ids == null) return;
+    await DBHelper().reorderObjectives(ids);
+    reload();
   }
 
   /// Closing a quarter archives the objective and clones it into the next one,
@@ -548,16 +586,38 @@ class GoalsTabState extends State<GoalsTab> {
     if (created == true) reload();
   }
 
+  List<Map<String, dynamic>> _krSiblings(Map<String, dynamic> k) {
+    final o = [for (final a in _areas) ...(a['objectives'] as List)]
+        .cast<Map<String, dynamic>>()
+        .firstWhere((o) => o['id'] == k['objective_id']);
+    return (o['key_results'] as List).cast<Map<String, dynamic>>();
+  }
+
   void _krMenu(Map<String, dynamic> k) {
     showActionSheet(context, title: k['title'], actions: [
       SheetAction(
           icon: Icons.edit_outlined, label: 'Edit', onTap: () => _editKr(k)),
+      if (_krSiblings(k).length > 1)
+        SheetAction(
+            icon: Icons.swap_vert,
+            label: 'Reorder key results',
+            onTap: () => _reorderKrs(k)),
       SheetAction(
           icon: Icons.delete_outline,
           label: 'Delete',
           destructive: true,
           onTap: () => _confirmDeleteKr(k)),
     ]);
+  }
+
+  Future<void> _reorderKrs(Map<String, dynamic> k) async {
+    final ids =
+        await showReorderSheet(context, title: 'Reorder key results', entries: [
+      for (final s in _krSiblings(k)) (s['id'] as String, s['title'] as String),
+    ]);
+    if (ids == null) return;
+    await DBHelper().reorderKeyResults(ids);
+    reload();
   }
 
   Future<void> _editKr(Map<String, dynamic> k) async {

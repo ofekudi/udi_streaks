@@ -39,6 +39,17 @@ including adding a child ("Add objective" on an area, "Add key result" on an
 objective), so no row carries a permanent add affordance. `InlineAddField`
 survives only for "Add area", once, at the bottom of the list.
 
+Every level can be **reordered** the same way: a "Reorder" action on the
+long-press sheet (shown only when the row has siblings) opens `showReorderSheet`
+(`ui/kit.dart`), a drag-handle list of just that sibling level — the tree itself
+carries no drag affordance. It writes `sort_order`, which every tree query
+already ordered by: a reorder renumbers the sibling list 0..n-1 in one
+transaction (`reorderAreas` / `reorderObjectives` / `reorderKeyResults`), and
+inserts take `MAX(sort_order)+1` among their siblings so a new row lands last
+instead of tying at 0 and surfacing mid-list. With the archive hidden, a
+reorder renumbers only the visible objectives — accepted; archived rows are an
+edge state. `test/reorder_test.dart` covers the round trip.
+
 Every row is at most two lines — title, then a `ScoreBar` — and the only number
 in the tree is a key result's `X / Y`, in a right-hand column beside both lines
 so the title keeps its own line. Objectives and areas show their rollup as the

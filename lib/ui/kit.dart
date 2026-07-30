@@ -163,6 +163,67 @@ Future<void> showActionSheet(
   );
 }
 
+/// One sibling level as a drag list: each `(id, label)` entry is a row with a
+/// drag handle. Dismissing the sheet returns the ids in their new order, or
+/// null when nothing moved — there is no confirm step, the drag is the edit.
+Future<List<String>?> showReorderSheet(
+  BuildContext context, {
+  required String title,
+  required List<(String, String)> entries,
+}) async {
+  final order = [...entries];
+  await showModalBottomSheet(
+    context: context,
+    builder: (_) => StatefulBuilder(
+      builder: (context, setState) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800)),
+            ),
+            Flexible(
+              child: ReorderableListView(
+                shrinkWrap: true,
+                buildDefaultDragHandles: false,
+                onReorderItem: (from, to) => setState(() {
+                  order.insert(to, order.removeAt(from));
+                }),
+                children: [
+                  for (var i = 0; i < order.length; i++)
+                    ListTile(
+                      key: ValueKey(order[i].$1),
+                      title: Text(order[i].$2,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: ReorderableDragStartListener(
+                        index: i,
+                        child: const Icon(Icons.drag_handle),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: kGapSm),
+          ],
+        ),
+      ),
+    ),
+  );
+  final ids = [for (final e in order) e.$1];
+  for (var i = 0; i < ids.length; i++) {
+    if (ids[i] != entries[i].$1) return ids;
+  }
+  return null;
+}
+
 /// A small caps-ish heading above a group, with an optional explainer under it.
 class SectionHeader extends StatelessWidget {
   final String title;

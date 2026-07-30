@@ -681,19 +681,50 @@ class DBHelper {
 
   // ---------- Areas ----------
 
-  Future<String> insertArea(String name,
-      {String? icon, int sortOrder = 0}) async {
+  Future<String> insertArea(String name, {String? icon}) async {
     final db = await database;
     final id = uuid.v4();
     await db.insert('areas', {
       'id': id,
       'name': name,
       'icon': icon,
-      'sort_order': sortOrder,
+      'sort_order': await _nextSortOrder(db, 'areas'),
       'created_at': DateTime.now().toIso8601String(),
     });
     return id;
   }
+
+  /// One past the highest `sort_order` among the siblings, so an insert lands
+  /// at the end of the list instead of tying with whatever holds 0.
+  Future<int> _nextSortOrder(DatabaseExecutor db, String table,
+      {String? parentColumn, Object? parentId}) async {
+    final where = parentColumn == null ? '' : 'WHERE $parentColumn IS ?';
+    final rows = await db.rawQuery(
+      'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM $table $where',
+      parentColumn == null ? null : [parentId],
+    );
+    return rows.first['next'] as int;
+  }
+
+  /// Rewrites a sibling list's `sort_order` to match [ids]. The caller passes
+  /// the whole level in its new order; anything not listed keeps its number.
+  Future<void> _renumber(String table, List<String> ids) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (var i = 0; i < ids.length; i++) {
+        await txn.update(table, {'sort_order': i},
+            where: 'id = ?', whereArgs: [ids[i]]);
+      }
+    });
+  }
+
+  Future<void> reorderAreas(List<String> ids) => _renumber('areas', ids);
+
+  Future<void> reorderObjectives(List<String> ids) =>
+      _renumber('objectives', ids);
+
+  Future<void> reorderKeyResults(List<String> ids) =>
+      _renumber('key_results', ids);
 
   Future<List<Map<String, dynamic>>> getAreas() async {
     final db = await database;
@@ -800,7 +831,8 @@ class DBHelper {
       'start_date': start.toIso8601String(),
       'end_date': end.toIso8601String(),
       'status': 'active',
-      'sort_order': 0,
+      'sort_order': await _nextSortOrder(db, 'objectives',
+          parentColumn: 'area_id', parentId: areaId),
       'created_at': now,
       'updated_at': now,
     });
@@ -996,7 +1028,8 @@ class DBHelper {
       'category': category,
       'habit_id': habitId,
       'weight': weight,
-      'sort_order': 0,
+      'sort_order': await _nextSortOrder(db, 'key_results',
+          parentColumn: 'objective_id', parentId: objectiveId),
       'created_at': DateTime.now().toIso8601String(),
     });
     return id;
