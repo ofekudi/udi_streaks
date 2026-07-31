@@ -26,21 +26,6 @@ class DBHelper {
   /// The current schema version. Also the version tests open at.
   static const int schemaVersion = 7;
 
-  /// Every table [exportAll] dumps. A new table has to be added here too, which
-  /// `export_test.dart` enforces by comparing this against the live schema.
-  static const List<String> exportedTables = [
-    'habits',
-    'habit_completions',
-    'habit_skips',
-    'areas',
-    'objectives',
-    'trackables',
-    'key_results',
-    'executions',
-    'measurements',
-    'reviews',
-  ];
-
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'habits_database.db');
     return _open(path);
@@ -868,18 +853,6 @@ class DBHelper {
         where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Expand all / collapse all, in one statement.
-  Future<void> setObjectivesCollapsed(
-      Iterable<String> ids, bool collapsed) async {
-    final list = ids.toList();
-    if (list.isEmpty) return;
-    final db = await database;
-    final marks = List.filled(list.length, '?').join(', ');
-    await db.rawUpdate(
-      'UPDATE objectives SET collapsed = ? WHERE id IN ($marks)',
-      [collapsed ? 1 : 0, ...list],
-    );
-  }
 
   Future<void> deleteObjective(String id) async {
     final db = await database;
@@ -1352,26 +1325,6 @@ class DBHelper {
     }
     await db.delete('measurements', where: 'id = ?', whereArgs: [id]);
     return false;
-  }
-
-  // ---------- Backup ----------
-
-  /// Every row in the database, table by table, as a JSON-encodable map.
-  ///
-  /// The app is local-only with no account, so a lost phone is lost data and
-  /// this is the only way out. Raw rows rather than anything friendlier on
-  /// purpose: nothing here is computed, so the tables *are* the state, and a
-  /// dump that mirrors the schema is one an importer can trust. `schema_version`
-  /// rides along because a restore has to know which migrations the rows predate.
-  Future<Map<String, dynamic>> exportAll() async {
-    final db = await database;
-    return {
-      'schema_version': schemaVersion,
-      'exported_at': DateTime.now().toIso8601String(),
-      'tables': {
-        for (final table in exportedTables) table: await db.query(table),
-      },
-    };
   }
 
   // ---------- History ----------

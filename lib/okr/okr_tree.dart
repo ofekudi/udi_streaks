@@ -1,7 +1,4 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
@@ -80,11 +77,6 @@ class GoalsTabState extends State<GoalsTab> {
     });
   }
 
-  Iterable<String> get _allObjectiveIds => [
-        for (final a in _areas)
-          for (final o in (a['objectives'] as List)) o['id'] as String,
-      ];
-
   @override
   Widget build(BuildContext context) {
     final p = Period.current();
@@ -93,33 +85,29 @@ class GoalsTabState extends State<GoalsTab> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text('${p.label} · ${fmtPct(p.fractionElapsed)} elapsed'),
         actions: [
+          // Areas reorder from here rather than from a row's long-press: every
+          // other level reorders from its parent, and an area's parent is the
+          // tab.
           PopupMenuButton<String>(
             onSelected: (v) {
               switch (v) {
-                case 'expand':
-                  setState(_collapsed.clear);
-                  DBHelper().setObjectivesCollapsed(_allObjectiveIds, false);
-                case 'collapse':
-                  setState(() => _collapsed.addAll(_allObjectiveIds));
-                  DBHelper().setObjectivesCollapsed(_allObjectiveIds, true);
                 case 'archived':
                   setState(() => _showArchived = !_showArchived);
                   reload();
-                case 'backup':
-                  _copyBackup();
+                case 'reorder':
+                  _reorderAreas();
               }
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'expand', child: Text('Expand all')),
-              const PopupMenuItem(
-                  value: 'collapse', child: Text('Collapse all')),
               PopupMenuItem(
                 value: 'archived',
                 child: Text(_showArchived
                     ? 'Hide archived objectives'
                     : 'Show archived objectives'),
               ),
-              const PopupMenuItem(value: 'backup', child: Text('Copy backup')),
+              if (_areas.length > 1)
+                const PopupMenuItem(
+                    value: 'reorder', child: Text('Reorder areas')),
             ],
           ),
         ],
@@ -160,25 +148,6 @@ class GoalsTabState extends State<GoalsTab> {
                 ],
               ),
             ),
-    );
-  }
-
-  /// Puts the whole database on the clipboard as JSON, to paste anywhere that
-  /// isn't this phone.
-  ///
-  /// The clipboard rather than a share sheet or a file: it needs no dependency
-  /// and no platform wiring, and pasting into a note is already a backup. Says
-  /// how many rows went, because a silent copy gives no reason to believe it
-  /// worked.
-  Future<void> _copyBackup() async {
-    final data = await DBHelper().exportAll();
-    final rows = (data['tables'] as Map<String, dynamic>)
-        .values
-        .fold<int>(0, (n, t) => n + (t as List).length);
-    await Clipboard.setData(ClipboardData(text: jsonEncode(data)));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied $rows rows')),
     );
   }
 
@@ -277,18 +246,12 @@ class GoalsTabState extends State<GoalsTab> {
           label: 'Add objective',
           onTap: () => _addObjective(a)),
       SheetAction(
-          icon: Icons.emoji_emotions_outlined,
-          label: 'Change emoji',
-          onTap: () => _changeAreaEmoji(a)),
-      SheetAction(
-          icon: Icons.drive_file_rename_outline,
-          label: 'Rename',
-          onTap: () => _renameArea(a)),
-      if (_areas.length > 1)
+          icon: Icons.edit_outlined, label: 'Edit', onTap: () => _editArea(a)),
+      if ((a['objectives'] as List).length > 1)
         SheetAction(
             icon: Icons.swap_vert,
-            label: 'Reorder areas',
-            onTap: _reorderAreas),
+            label: 'Reorder objectives',
+            onTap: () => _reorderObjectives(a)),
       SheetAction(
           icon: Icons.delete_outline,
           label: 'Delete',
@@ -308,23 +271,14 @@ class GoalsTabState extends State<GoalsTab> {
     reload();
   }
 
-  /// The 48x48 emoji well next to the "Add area" field.
+  /// The emoji well next to the "Add area" field.
   Widget _areaEmojiButton() {
-    return InkWell(
+    return EmojiWell(
+      emoji: _newAreaEmoji,
       onTap: () async {
         final emoji = await pickEmoji(context);
         if (emoji != null) setState(() => _newAreaEmoji = emoji);
       },
-      child: Container(
-        width: kTapTarget,
-        height: kTapTarget,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-          borderRadius: BorderRadius.circular(kGapXs),
-        ),
-        child: Text(_newAreaEmoji, style: const TextStyle(fontSize: 22)),
-      ),
     );
   }
 
@@ -342,20 +296,15 @@ class GoalsTabState extends State<GoalsTab> {
     reload();
   }
 
-  Future<void> _changeAreaEmoji(Map<String, dynamic> a) async {
-    final emoji = await pickEmoji(context);
-    if (emoji == null) return;
-    await DBHelper().updateArea(a['id'], icon: emoji);
+  /// Emoji and name in one dialog, written in one [DBHelper.updateArea] call.
+  Future<void> _editArea(Map<String, dynamic> a) async {
+    final edit = await promptNameAndEmoji(context,
+        title: 'Edit area',
+        initialName: a['name'] as String,
+        initialEmoji: (a['icon'] as String?) ?? '🎯');
+    if (edit == null) return;
+    await DBHelper().updateArea(a['id'], name: edit.name, icon: edit.emoji);
     reload();
-  }
-
-  Future<void> _renameArea(Map<String, dynamic> a) async {
-    final name =
-        await promptText(context, title: 'Rename area', initial: a['name']);
-    if (name != null && name.isNotEmpty) {
-      await DBHelper().updateArea(a['id'], name: name);
-      reload();
-    }
   }
 
   Future<void> _confirmDeleteArea(Map<String, dynamic> a) async {
@@ -482,13 +431,6 @@ class GoalsTabState extends State<GoalsTab> {
           .labelSmall
           ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant));
 
-  /// The objectives shown beside [o] — its area's list as loaded, so with the
-  /// archive hidden a reorder renumbers only the visible rows.
-  List<Map<String, dynamic>> _objectiveSiblings(Map<String, dynamic> o) {
-    final area = _areas.firstWhere((a) => a['id'] == o['area_id']);
-    return (area['objectives'] as List).cast<Map<String, dynamic>>();
-  }
-
   void _objectiveMenu(Map<String, dynamic> o) {
     showActionSheet(context, title: o['title'], actions: [
       SheetAction(
@@ -497,11 +439,11 @@ class GoalsTabState extends State<GoalsTab> {
           icon: Icons.drive_file_rename_outline,
           label: 'Rename',
           onTap: () => _renameObjective(o)),
-      if (_objectiveSiblings(o).length > 1)
+      if ((o['key_results'] as List).length > 1)
         SheetAction(
             icon: Icons.swap_vert,
-            label: 'Reorder objectives',
-            onTap: () => _reorderObjectives(o)),
+            label: 'Reorder key results',
+            onTap: () => _reorderKrs(o)),
       ..._closeOrReopen(o),
       SheetAction(
           icon: Icons.delete_outline,
@@ -511,11 +453,13 @@ class GoalsTabState extends State<GoalsTab> {
     ]);
   }
 
-  Future<void> _reorderObjectives(Map<String, dynamic> o) async {
+  /// The area's objectives as loaded, so with the archive hidden a reorder
+  /// renumbers only the visible rows.
+  Future<void> _reorderObjectives(Map<String, dynamic> a) async {
     final ids =
         await showReorderSheet(context, title: 'Reorder objectives', entries: [
-      for (final s in _objectiveSiblings(o))
-        (s['id'] as String, s['title'] as String),
+      for (final o in (a['objectives'] as List).cast<Map<String, dynamic>>())
+        (o['id'] as String, o['title'] as String),
     ]);
     if (ids == null) return;
     await DBHelper().reorderObjectives(ids);
@@ -541,7 +485,7 @@ class GoalsTabState extends State<GoalsTab> {
           onTap: () => _closeQuarter(o)),
       SheetAction(
           icon: Icons.archive_outlined,
-          label: 'Archive without grading',
+          label: 'Archive',
           onTap: () => _setObjectiveStatus(o, 'archived')),
     ];
   }
@@ -679,22 +623,10 @@ class GoalsTabState extends State<GoalsTab> {
     if (created == true) reload();
   }
 
-  List<Map<String, dynamic>> _krSiblings(Map<String, dynamic> k) {
-    final o = [for (final a in _areas) ...(a['objectives'] as List)]
-        .cast<Map<String, dynamic>>()
-        .firstWhere((o) => o['id'] == k['objective_id']);
-    return (o['key_results'] as List).cast<Map<String, dynamic>>();
-  }
-
   void _krMenu(Map<String, dynamic> k) {
     showActionSheet(context, title: k['title'], actions: [
       SheetAction(
           icon: Icons.edit_outlined, label: 'Edit', onTap: () => _editKr(k)),
-      if (_krSiblings(k).length > 1)
-        SheetAction(
-            icon: Icons.swap_vert,
-            label: 'Reorder key results',
-            onTap: () => _reorderKrs(k)),
       SheetAction(
           icon: Icons.delete_outline,
           label: 'Delete',
@@ -703,10 +635,11 @@ class GoalsTabState extends State<GoalsTab> {
     ]);
   }
 
-  Future<void> _reorderKrs(Map<String, dynamic> k) async {
+  Future<void> _reorderKrs(Map<String, dynamic> o) async {
     final ids =
         await showReorderSheet(context, title: 'Reorder key results', entries: [
-      for (final s in _krSiblings(k)) (s['id'] as String, s['title'] as String),
+      for (final k in (o['key_results'] as List).cast<Map<String, dynamic>>())
+        (k['id'] as String, k['title'] as String),
     ]);
     if (ids == null) return;
     await DBHelper().reorderKeyResults(ids);

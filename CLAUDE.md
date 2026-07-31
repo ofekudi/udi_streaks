@@ -41,16 +41,20 @@ survives at the bottom of a list, once per tab: "Add area" on the OKR tree and
 "Add streak" on the habits list (where the picked emoji is prefixed onto the
 name — habits have no icon column).
 
-Every level can be **reordered** the same way: a "Reorder" action on the
-long-press sheet (shown only when the row has siblings) opens `showReorderSheet`
-(`ui/kit.dart`), a drag-handle list of just that sibling level — the tree itself
-carries no drag affordance. It writes `sort_order`, which every tree query
-already ordered by: a reorder renumbers the sibling list 0..n-1 in one
-transaction (`reorderAreas` / `reorderObjectives` / `reorderKeyResults`), and
-inserts take `MAX(sort_order)+1` among their siblings so a new row lands last
-instead of tying at 0 and surfacing mid-list. With the archive hidden, a
-reorder renumbers only the visible objectives — accepted; archived rows are an
-edge state. `test/reorder_test.dart` covers the round trip.
+Every level can be **reordered**, and **a row reorders its children, never its
+siblings** — "Reorder objectives" is on the area, "Reorder key results" on the
+objective, and "Reorder areas" in the tab's overflow menu, an area's parent
+being the tab. That is one entry per list instead of the same entry repeated on
+every row of a level, where it read as a property of the row. It is offered only
+once the list has two rows in it, and opens `showReorderSheet` (`ui/kit.dart`), a
+drag-handle list of that one level — the tree itself carries no drag affordance.
+It writes `sort_order`, which every tree query already ordered by: a reorder
+renumbers the list 0..n-1 in one transaction (`reorderAreas` /
+`reorderObjectives` / `reorderKeyResults`), and inserts take `MAX(sort_order)+1`
+among their siblings so a new row lands last instead of tying at 0 and surfacing
+mid-list. With the archive hidden, a reorder renumbers only the visible
+objectives — accepted; archived rows are an edge state.
+`test/reorder_test.dart` covers the round trip.
 
 Every row is two lines: a title, and a `ScoreBar` spanning the full width of the
 card beneath it. A key result's `X / Y` shares the *first* line with its title,
@@ -157,11 +161,11 @@ genuinely deleted, so `_deleteReviewsUnder` does, running before the parent dele
 while the subtree is still there to find. Add a level to the hierarchy and it
 needs a branch there.
 
-`exportAll` dumps every table as JSON, copied to the clipboard from the OKR tab's
-overflow menu — with no account and no backend, that is the only way data leaves
-the phone. Raw rows on purpose: nothing is computed, so the tables *are* the
-state. A new table must be added to `DBHelper.exportedTables`, which
-`test/export_test.dart` enforces against the live schema. There is no import yet.
+**Nothing exports.** There is no backup, no import, and no share — with no
+account and no backend, the database on the phone is the only copy. A clipboard
+JSON dump (`exportAll` / `exportedTables`) existed and was removed as more menu
+than it earned; the OKR tab's overflow menu holds only the archived toggle and
+"Reorder areas".
 
 A habit can **feed a COUNT key result**: ticking the habit also counts there.
 The link is offered on the habit side only — `habit_detail_sheet.dart` gains
@@ -193,8 +197,11 @@ and don't recompute a rule inline in a widget.
   `setState` and is never persisted — except which objectives are collapsed,
   which is `objectives.collapsed` so the tree reopens the way it was left.
 - Spacing comes from `ui/kit.dart` (`kGapXs`=4 … `kGapXl`=24). Reuse
-  `showActionSheet`, `confirmDelete`, `promptText`, `pickEmoji`,
-  `InlineAddField`, `ScoreBar`.
+  `showActionSheet`, `confirmDelete`, `promptText`, `pickEmoji`, `EmojiWell`,
+  `InlineAddField`, `ScoreBar`. A row carrying both an emoji and a name edits
+  them in one action: `promptNameAndEmoji` is `promptText` with an `EmojiWell`
+  beside the field, which is what an area's "Edit" opens, writing both in one
+  `updateArea` call. Two menu entries for one edit is what it replaced.
 - `ScoreBar` takes its colour from the scheme — `primary`, or `tertiary` for a
   key result that wants its number to go *down* — so it holds contrast on any
   surface, and a dark theme would need nothing. It is otherwise pure colour, so
@@ -223,9 +230,10 @@ baseline from the KR's last entry, so progressive goals need no rebuilding.
 New migrations go in `_onUpgrade` behind `if (oldVersion < N)`.
 
 `objectives.collapsed` is the accordion's fold state — user input, not a
-computed value, which is why it doesn't break the rule above. Its setters
-(`setObjectiveCollapsed`, `setObjectivesCollapsed`) skip `updated_at`: folding
-a row isn't an edit. The default 0 is what keeps a new or renewed objective
+computed value, which is why it doesn't break the rule above. Its setter
+(`setObjectiveCollapsed`) skips `updated_at`: folding a row isn't an edit. One
+row at a time is all there is — expand-all and collapse-all were removed along
+with the bulk setter. The default 0 is what keeps a new or renewed objective
 expanded; `okr_tree.dart` seeds its `_collapsed` set from the rows on every
 `_load()`, so archived-but-hidden objectives keep their state in the DB.
 

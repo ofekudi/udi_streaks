@@ -224,18 +224,4 @@ void main() {
     objs = await helper.getObjectivesWithProgress('a1');
     expect([for (final o in objs) o['collapsed']], [0, 0]);
   });
-
-  test('setObjectivesCollapsed folds and unfolds the lot', () async {
-    final helper = DBHelper();
-    await helper.openAt(path);
-
-    await helper.setObjectivesCollapsed(['o1', 'o2'], true);
-    var objs = await helper.getObjectivesWithProgress('a1');
-    expect([for (final o in objs) o['collapsed']], [1, 1]);
-
-    await helper.setObjectivesCollapsed(['o2'], false);
-    objs = await helper.getObjectivesWithProgress('a1');
-    expect({for (final o in objs) o['id']: o['collapsed']},
-        {'o1': 1, 'o2': 0});
-  });
 }

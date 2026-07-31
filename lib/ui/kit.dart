@@ -330,6 +330,95 @@ Future<String?> promptText(BuildContext context,
   );
 }
 
+/// The same dialog with an emoji beside the field, for a row that carries both.
+///
+/// One action rather than two: an emoji and a name are one edit, and
+/// [DBHelper.updateArea] already takes them in one write. Stateful because
+/// [promptText] closes over its controller and so could not repaint a freshly
+/// picked emoji.
+///
+/// Returns null when dismissed *or* when the name is empty, so a caller needs
+/// one null check.
+Future<({String name, String emoji})?> promptNameAndEmoji(
+  BuildContext context, {
+  required String title,
+  required String initialName,
+  required String initialEmoji,
+}) {
+  return showDialog<({String name, String emoji})>(
+    context: context,
+    builder: (_) => _NameEmojiDialog(
+      title: title,
+      initialName: initialName,
+      initialEmoji: initialEmoji,
+    ),
+  );
+}
+
+class _NameEmojiDialog extends StatefulWidget {
+  final String title;
+  final String initialName;
+  final String initialEmoji;
+
+  const _NameEmojiDialog({
+    required this.title,
+    required this.initialName,
+    required this.initialEmoji,
+  });
+
+  @override
+  State<_NameEmojiDialog> createState() => _NameEmojiDialogState();
+}
+
+class _NameEmojiDialogState extends State<_NameEmojiDialog> {
+  late final _controller = TextEditingController(text: widget.initialName);
+  late String _emoji = widget.initialEmoji;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, (name: name, emoji: _emoji));
+  }
+
+  Future<void> _pick() async {
+    final emoji = await pickEmoji(context);
+    if (emoji != null) setState(() => _emoji = emoji);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Row(
+        children: [
+          EmojiWell(emoji: _emoji, onTap: _pick),
+          const SizedBox(width: kGapSm),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              autofocus: true,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              onSubmitted: (_) => _submit(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        TextButton(onPressed: _submit, child: const Text('Save')),
+      ],
+    );
+  }
+}
+
 /// Asks for one value to log, returning the raw text the user typed or null if
 /// they backed out. Parsing is the caller's job, so the notation survives.
 ///
@@ -379,6 +468,32 @@ Future<String?> pickEmoji(BuildContext context) {
       ),
     ),
   );
+}
+
+/// A tap target showing one emoji, opening [pickEmoji]. Sits beside a name —
+/// in the "Add area" field's `leading` slot, and in [promptNameAndEmoji].
+class EmojiWell extends StatelessWidget {
+  final String emoji;
+  final VoidCallback onTap;
+
+  const EmojiWell({super.key, required this.emoji, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: kTapTarget,
+        height: kTapTarget,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          borderRadius: BorderRadius.circular(kGapXs),
+        ),
+        child: Text(emoji, style: const TextStyle(fontSize: 22)),
+      ),
+    );
+  }
 }
 
 /// Inline "+ Add" that expands into a text field in place. Submitting adds a
