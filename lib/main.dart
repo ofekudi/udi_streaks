@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'habits/habits_screen.dart';
-import 'okr/okr_screens.dart';
 import 'okr/okr_tree.dart';
 import 'okr/record_screen.dart';
 
@@ -28,8 +27,8 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Bottom-nav shell. Habits is the home tab (highest-frequency capture),
-/// then Goals (intent + progress) and History (over time).
+/// Bottom-nav shell. Habits is the home tab, being the highest-frequency
+/// capture; OKR (intent + progress) is the other.
 class RootNav extends StatefulWidget {
   const RootNav({super.key});
 
@@ -44,13 +43,11 @@ class _RootNavState extends State<RootNav> {
   // never reaches its siblings' one-shot loads. Entering a tab reloads it.
   final _habitsKey = GlobalKey<HabitsScreenState>();
   final _goalsKey = GlobalKey<GoalsTabState>();
-  final _historyKey = GlobalKey<HistoryTabState>();
 
   late final _tabs = [
     HabitsScreen(
         key: _habitsKey, title: 'Never Miss Twice', onRecord: _recordFromHabits),
     GoalsTab(key: _goalsKey),
-    HistoryTab(key: _historyKey),
   ];
 
   /// The Habits tab's Record FAB. The shell brokers it — pushing the OKR
@@ -79,8 +76,6 @@ class _RootNavState extends State<RootNav> {
         _habitsKey.currentState?.reload();
       case 1:
         _goalsKey.currentState?.reload();
-      case 2:
-        _historyKey.currentState?.reload();
     }
   }
 
@@ -100,10 +95,6 @@ class _RootNavState extends State<RootNav> {
               icon: Icon(Icons.track_changes_outlined),
               selectedIcon: Icon(Icons.track_changes),
               label: 'OKR'),
-          NavigationDestination(
-              icon: Icon(Icons.timeline_outlined),
-              selectedIcon: Icon(Icons.timeline),
-              label: 'History'),
         ],
       ),
     );

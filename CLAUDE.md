@@ -24,7 +24,7 @@ pinning numbers, so these track the SDK version above:
 Dependencies point downward; nothing may import from a layer above it.
 
 ```
-main.dart          app setup + bottom-nav shell only
+main.dart          app setup + bottom-nav shell only (two tabs: Habits, OKR)
 habits/  okr/      feature modules: screens, sheets, dialogs
 ui/kit.dart        shared design kit (spacing, sheets, dialogs, charts)
 db_helper.dart     all persistence — schema, migrations, CRUD
@@ -207,7 +207,7 @@ and don't recompute a rule inline in a widget.
 - Rows are raw `Map<String, dynamic>`, sometimes merged with computed fields
   (`{...kr, ...computeKr(kr)}`). No model layer — column names are the map keys.
 - State is plain `setState`; each screen has a `_load()` that queries
-  `DBHelper()` (a singleton) and refreshes after a push. The three tab roots
+  `DBHelper()` (a singleton) and refreshes after a push. Both tab roots
   name theirs `reload()`, public, because `RootNav` calls it on the tab being
   entered — the `IndexedStack` keeps sibling tabs alive across writes, so tab
   entry is what reloads them (`test/tab_reload_test.dart` pins this). UI-only
