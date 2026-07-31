@@ -694,7 +694,7 @@ class LogValueField extends StatelessWidget {
         suffixText: unit ?? '',
         border: const OutlineInputBorder(),
         contentPadding: compact
-            ? const EdgeInsets.symmetric(horizontal: kGapSm, vertical: kGapSm)
+            ? const EdgeInsets.symmetric(horizontal: kGapSm, vertical: kGapXs)
             : null,
       ),
     );
