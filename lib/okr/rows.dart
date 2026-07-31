@@ -3,6 +3,55 @@ import 'package:flutter/material.dart';
 import '../ui/kit.dart';
 import 'log_value.dart';
 
+/// An area as a quiet uppercase heading, not a row you can enter — an area has
+/// no properties worth a screen. The rule beneath is what anchors the heading to
+/// the cards under it. Its rollup is a percent rather than a bar: a bar here
+/// would read as one more row in the list.
+///
+/// Shared by the OKR tree and the Record page, which show the same outline.
+/// Gestures belong to the caller — the tree wraps this in the long-press menu,
+/// the Record page wraps it in nothing.
+class AreaHeading extends StatelessWidget {
+  final Map<String, dynamic> area;
+
+  const AreaHeading(this.area, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final score = area['score'] as double?;
+    final label = theme.textTheme.labelLarge?.copyWith(
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0.6,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kGapMd, kGapLg, kGapMd, kGapSm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(area['icon'] ?? '🎯', style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: kGapSm),
+              Expanded(
+                child: Text((area['name'] as String).toUpperCase(),
+                    style: label),
+              ),
+              if (score != null) Text(fmtPct(score), style: label),
+            ],
+          ),
+          const SizedBox(height: kGapSm),
+          Divider(
+              height: 1,
+              thickness: 0.5,
+              color: theme.colorScheme.outlineVariant),
+        ],
+      ),
+    );
+  }
+}
+
 /// `3x10 / 3x12 reps`, or just the current value when the key result is
 /// track-only. Both sides read as the notation that was typed. Scales down
 /// rather than wrapping.
@@ -17,11 +66,18 @@ class KrValueCell extends StatelessWidget {
   /// the row to itself, takes the default.
   final double maxWidth;
 
-  const KrValueCell(this.kr, {super.key, this.maxWidth = 140});
+  /// One step down to `bodySmall`, matching the [DeltaText] beneath it. The
+  /// objective fill page states the number beside a field that has to stay
+  /// comfortably tappable, and the number is the half that can afford to give.
+  final bool dense;
+
+  const KrValueCell(this.kr,
+      {super.key, this.maxWidth = 140, this.dense = false});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final style = dense ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium;
     final unit = kr['unit'] ?? '';
     final text = kr['target'] != null
         ? '${currentLabel(kr)} / ${targetLabel(kr)} $unit'
@@ -39,8 +95,7 @@ class KrValueCell extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: Text(text.trim(),
                 maxLines: 1,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+                style: style?.copyWith(fontWeight: FontWeight.w700)),
           ),
           if (delta != null) DeltaText(delta, down: krWantsDown(kr)),
         ],

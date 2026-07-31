@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
-import 'kr_row.dart';
 import 'log_value.dart';
 import 'okr_screens.dart';
 import 'period.dart';
 import 'record_screen.dart';
+import 'rows.dart';
 
 /// The OKR tab: the whole tree in one scrolling outline.
 ///
@@ -196,48 +196,12 @@ class GoalsTabState extends State<GoalsTab> {
     );
   }
 
-  /// A quiet uppercase label, not a row you can enter. Long-press is the menu.
-  ///
-  /// The rule beneath is what anchors the heading to the cards under it. Its
-  /// rollup is a percent rather than a bar: an area is a heading, and a bar
-  /// here would read as a fourth row in the accordion.
-  Widget _areaHeading(Map<String, dynamic> a) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final score = a['score'] as double?;
-    final label = theme.textTheme.labelLarge?.copyWith(
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0.6,
-      color: muted,
-    );
-    return InkWell(
-      onLongPress: () => _areaMenu(a),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(kGapMd, kGapLg, kGapMd, kGapSm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(a['icon'] ?? '🎯', style: const TextStyle(fontSize: 18)),
-                const SizedBox(width: kGapSm),
-                Expanded(
-                  child:
-                      Text((a['name'] as String).toUpperCase(), style: label),
-                ),
-                if (score != null) Text(fmtPct(score), style: label),
-              ],
-            ),
-            const SizedBox(height: kGapSm),
-            Divider(
-                height: 1,
-                thickness: 0.5,
-                color: theme.colorScheme.outlineVariant),
-          ],
-        ),
-      ),
-    );
-  }
+  /// [AreaHeading], with the tree's own gesture on it: long-press is the menu,
+  /// and there is no tap — an area isn't a destination.
+  Widget _areaHeading(Map<String, dynamic> a) => InkWell(
+        onLongPress: () => _areaMenu(a),
+        child: AreaHeading(a),
+      );
 
   void _areaMenu(Map<String, dynamic> a) {
     showActionSheet(context, title: a['name'], actions: [
@@ -323,24 +287,10 @@ class GoalsTabState extends State<GoalsTab> {
   /// key result belongs to the objective above it, which is what lets every row
   /// share one left edge.
   Widget _objectiveCard(Map<String, dynamic> o) {
-    final scheme = Theme.of(context).colorScheme;
     final open = _isExpanded(o['id'] as String);
     final archived = o['status'] == 'archived';
-    return Card(
-      margin: const EdgeInsets.only(bottom: kGapSm),
-      elevation: 0,
-      // An archived card sits a tone deeper, so it reads as shelved rather than
-      // dressed differently. Not `surfaceContainerLowest`, which is pure white
-      // and would glow against the page.
-      color: archived ? scheme.surfaceContainer : scheme.surfaceContainerLow,
-      // The fill alone left the card's edge ambiguous at a glance — it is only
-      // a tone off the page. The outline is what closes it.
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(kRadiusCard),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      // Keeps the header's ink ripple inside the rounded corners.
-      clipBehavior: Clip.antiAlias,
+    return AppCard(
+      deeper: archived,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -543,26 +493,17 @@ class GoalsTabState extends State<GoalsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _rule(),
+        const AppRule(),
         if (krs.isEmpty)
           _hint('No key results yet — long-press the objective to add one.'),
         for (var i = 0; i < krs.length; i++) ...[
-          if (i > 0) _rule(),
+          if (i > 0) const AppRule(),
           _krRow(krs[i]),
         ],
         const SizedBox(height: kGapXs),
       ],
     );
   }
-
-  /// A hairline inside a card, inset to the card's own text column.
-  Widget _rule() => Divider(
-        height: 1,
-        thickness: 0.5,
-        indent: kGapMd,
-        endIndent: kGapMd,
-        color: Theme.of(context).colorScheme.outlineVariant,
-      );
 
   /// Two lines — title and value, then the bar. The number shares the first
   /// line so the bar can span the card, matching the objective's above it.

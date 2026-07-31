@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
-import 'kr_row.dart';
 import 'log_value.dart';
 import 'period.dart';
+import 'rows.dart';
 import 'scoring.dart';
 
 // =========================================================================

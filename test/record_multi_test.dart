@@ -1,6 +1,7 @@
-// The Record page fills many key results in one pass: a field per value key
-// result, a blank field means "didn't do it", and one commit writes the rest.
-// A COUNT is the exception — its tap is already the record.
+// Recording is two steps: the Record page lists objectives, and the objective
+// you pick fills all of its key results at once. A blank field means "didn't do
+// it", and one commit writes the rest. A COUNT is the exception — its tap is
+// already the record.
 //
 // Leaving with text still in a field asks first, because a measurement can
 // always be deleted afterwards but typing can't be recovered.
@@ -31,15 +32,15 @@ void main() {
     db = DBHelper();
     await db.openAt(inMemoryDatabasePath);
     final now = DateTime.now();
-    final areaId = await db.insertArea('Training');
-    final objectiveId = await db.insertObjective(
-      areaId: areaId,
-      title: 'Increase muscle mass',
-      start: now.subtract(const Duration(days: 30)),
-      end: now.add(const Duration(days: 60)),
-    );
-    Future<String> kr(String title, String aggregation, double target,
-            String? unit) =>
+
+    Future<String> objective(String areaId, String title) => db.insertObjective(
+          areaId: areaId,
+          title: title,
+          start: now.subtract(const Duration(days: 30)),
+          end: now.add(const Duration(days: 60)),
+        );
+    Future<String> kr(String objectiveId, String title, String aggregation,
+            double target, String? unit) =>
         db.insertKeyResult(
           objectiveId: objectiveId,
           title: title,
@@ -47,13 +48,23 @@ void main() {
           target: target,
           unit: unit,
         );
-    bench = await kr('Bench press', 'LATEST', 36, 'reps');
-    squat = await kr('Squat', 'LATEST', 90, 'kg');
-    deadlift = await kr('Deadlift', 'LATEST', 110, 'kg');
-    books = await kr('Read 12 books', 'COUNT', 12, null);
+
+    final training = await db.insertArea('Training');
+    final muscle = await objective(training, 'Increase muscle mass');
+    bench = await kr(muscle, 'Bench press', 'LATEST', 36, 'reps');
+    squat = await kr(muscle, 'Squat', 'LATEST', 90, 'kg');
+    deadlift = await kr(muscle, 'Deadlift', 'LATEST', 110, 'kg');
+
+    final mind = await db.insertArea('Mind');
+    final read = await objective(mind, 'Read more');
+    books = await kr(read, 'Read 12 books', 'COUNT', 12, null);
+
+    // Nothing to record in this one — it must not be offered.
+    await objective(mind, 'Learn to sail');
   });
 
-  /// A host to push from, so the page has a back button to test the guard with.
+  /// A host to push from, so the pages have a back button to test the guard
+  /// with, and somewhere to land when they pop.
   Widget host() => MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
@@ -66,9 +77,16 @@ void main() {
         ),
       );
 
-  Future<void> openRecord(WidgetTester tester) async {
+  Future<void> openPicker(WidgetTester tester) async {
     await tester.pumpWidget(host());
     await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+  }
+
+  /// Step 1 then step 2: the picker, then the objective's fill page.
+  Future<void> openObjective(WidgetTester tester, String title) async {
+    await openPicker(tester);
+    await tester.tap(find.text(title));
     await tester.pumpAndSettle();
   }
 
@@ -76,109 +94,145 @@ void main() {
   /// than by index, so the test doesn't depend on two key results inserted in
   /// the same millisecond sorting one way.
   Finder fieldOf(String title) => find.descendant(
-        of: find.ancestor(of: find.text(title), matching: find.byType(Row)).first,
+        of: find
+            .ancestor(of: find.text(title), matching: find.byType(Column))
+            .first,
         matching: find.byType(LogValueField),
       );
 
   Future<List<Map<String, dynamic>>> entries(String krId) =>
       db.getMeasurementSeries(keyResultId: krId);
 
-  testWidgets('two filled fields write two measurements, the blank one none',
-      (tester) async {
-    await openRecord(tester);
+  group('the picker', () {
+    testWidgets('lists objectives under their area, with what each holds',
+        (tester) async {
+      await openPicker(tester);
 
-    await tester.enterText(fieldOf('Bench press'), '3x12');
-    await tester.enterText(fieldOf('Squat'), '85');
-    await tester.pump();
+      expect(find.text('TRAINING'), findsOneWidget);
+      expect(find.text('MIND'), findsOneWidget);
+      expect(find.text('Increase muscle mass'), findsOneWidget);
+      expect(find.text('3 key results'), findsOneWidget);
+      expect(find.text('Read more'), findsOneWidget);
+      expect(find.text('1 key result'), findsOneWidget);
+    });
 
-    expect(find.text('Log 2'), findsOneWidget);
-    await tester.tap(find.text('Log 2'));
-    await tester.pumpAndSettle();
+    testWidgets('an objective with no key results is not offered',
+        (tester) async {
+      await openPicker(tester);
 
-    final benchRows = await entries(bench);
-    expect(benchRows, hasLength(1));
-    expect(benchRows.single['value'], 36);
-    // The notation the user typed survives; "85" adds nothing over its number.
-    expect(benchRows.single['note'], '3x12');
+      expect(find.text('Learn to sail'), findsNothing);
+    });
 
-    final squatRows = await entries(squat);
-    expect(squatRows, hasLength(1));
-    expect(squatRows.single['value'], 85);
-    expect(squatRows.single['note'], isNull);
+    testWidgets('no key results anywhere states just that', (tester) async {
+      await db.openAt(inMemoryDatabasePath); // a fresh, empty database
+      await openPicker(tester);
 
-    expect(await entries(deadlift), isEmpty);
-
-    // Committed fields empty out, so the bar falls back to nothing pending.
-    expect(find.text('Log 2'), findsNothing);
-    expect(find.text('Log'), findsOneWidget);
+      expect(find.text('No key results yet'), findsOneWidget);
+    });
   });
 
-  testWidgets('an unparseable field keeps its text, the good one still writes',
-      (tester) async {
-    await openRecord(tester);
+  group('the fill page', () {
+    testWidgets('two filled fields write two measurements, the blank one none',
+        (tester) async {
+      await openObjective(tester, 'Increase muscle mass');
 
-    await tester.enterText(fieldOf('Bench press'), 'heavy');
-    await tester.enterText(fieldOf('Squat'), '85');
-    await tester.pump();
+      await tester.enterText(fieldOf('Bench press'), '3x12');
+      await tester.enterText(fieldOf('Squat'), '85');
+      await tester.pump();
 
-    await tester.tap(find.text('Log 2'));
-    await tester.pumpAndSettle();
+      expect(find.text('Log 2'), findsOneWidget);
+      await tester.tap(find.text('Log 2'));
+      await tester.pumpAndSettle();
 
-    expect(await entries(squat), hasLength(1));
-    expect(await entries(bench), isEmpty);
-    // The text stays put so it can be fixed rather than retyped.
-    expect(find.text('heavy'), findsOneWidget);
-    expect(find.text(kLogValueHelp), findsOneWidget);
-    expect(find.text('Log 1'), findsOneWidget);
+      final benchRows = await entries(bench);
+      expect(benchRows, hasLength(1));
+      expect(benchRows.single['value'], 36);
+      // The notation the user typed survives; "85" adds nothing over its number.
+      expect(benchRows.single['note'], '3x12');
+
+      final squatRows = await entries(squat);
+      expect(squatRows, hasLength(1));
+      expect(squatRows.single['value'], 85);
+      expect(squatRows.single['note'], isNull);
+
+      expect(await entries(deadlift), isEmpty);
+
+      // Committed fields empty out, so the bar falls back to nothing pending.
+      expect(find.text('Log 2'), findsNothing);
+      expect(find.text('Log'), findsOneWidget);
+    });
+
+    testWidgets('an unparseable field keeps its text, the good one still writes',
+        (tester) async {
+      await openObjective(tester, 'Increase muscle mass');
+
+      await tester.enterText(fieldOf('Bench press'), 'heavy');
+      await tester.enterText(fieldOf('Squat'), '85');
+      await tester.pump();
+
+      await tester.tap(find.text('Log 2'));
+      await tester.pumpAndSettle();
+
+      expect(await entries(squat), hasLength(1));
+      expect(await entries(bench), isEmpty);
+      // The text stays put so it can be fixed rather than retyped.
+      expect(find.text('heavy'), findsOneWidget);
+      expect(find.text(kLogValueHelp), findsOneWidget);
+      expect(find.text('Log 1'), findsOneWidget);
+    });
+
+    testWidgets('a COUNT records on the tap, with nothing to commit',
+        (tester) async {
+      await openObjective(tester, 'Read more');
+
+      await tester.tap(find.byTooltip('+1'));
+      await tester.pumpAndSettle();
+
+      final rows = await entries(books);
+      expect(rows, hasLength(1));
+      expect(rows.single['value'], 1);
+      // Every key result here is a COUNT, so there is no commit bar at all.
+      expect(find.text('Log'), findsNothing);
+    });
   });
 
-  testWidgets('a COUNT records on the tap, with nothing to commit',
-      (tester) async {
-    await openRecord(tester);
+  group('the discard guard', () {
+    testWidgets('leaving with a filled field asks, and keeping writes nothing',
+        (tester) async {
+      await openObjective(tester, 'Increase muscle mass');
 
-    await tester.tap(find.byTooltip('+1'));
-    await tester.pumpAndSettle();
+      await tester.enterText(fieldOf('Squat'), '85');
+      await tester.pump();
 
-    final rows = await entries(books);
-    expect(rows, hasLength(1));
-    expect(rows.single['value'], 1);
-    // Nothing was typed, so the commit bar stayed empty-handed.
-    expect(find.text('Log'), findsOneWidget);
-  });
+      await tester.pageBack();
+      await tester.pumpAndSettle();
 
-  testWidgets('leaving with a filled field asks, and keeping it writes nothing',
-      (tester) async {
-    await openRecord(tester);
+      expect(find.text('Discard 1 unlogged value?'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(fieldOf('Squat'), '85');
-    await tester.pump();
+      expect(find.text('85'), findsOneWidget);
+      expect(await entries(squat), isEmpty);
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Discard 1 unlogged value?'), findsOneWidget);
-    await tester.tap(find.text('Keep editing'));
-    await tester.pumpAndSettle();
+      // Back on the picker, one step out rather than all the way.
+      expect(find.text('Increase muscle mass'), findsOneWidget);
+      expect(find.text('3 key results'), findsOneWidget);
+      expect(await entries(squat), isEmpty);
+    });
 
-    expect(find.text('85'), findsOneWidget);
-    expect(await entries(squat), isEmpty);
+    testWidgets('leaving with every field empty pops without asking',
+        (tester) async {
+      await openObjective(tester, 'Increase muscle mass');
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Discard'));
-    await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
 
-    expect(find.text('open'), findsOneWidget);
-    expect(await entries(squat), isEmpty);
-  });
-
-  testWidgets('leaving with every field empty pops without asking',
-      (tester) async {
-    await openRecord(tester);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    expect(find.text('open'), findsOneWidget);
+      expect(find.text('3 key results'), findsOneWidget);
+    });
   });
 }

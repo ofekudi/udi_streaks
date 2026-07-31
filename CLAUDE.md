@@ -62,19 +62,22 @@ right-aligned — which is what lets its bar be as long as its objective's, so t
 bars on the same 0..1 scale can be compared by eye instead of ending at
 different arbitrary places. An area heading, having no bar, states its rollup as
 `fmtPct` on the right of its label; `fmtScore` (a raw 0..1) stays
-quarter-close-only. That row lives in `okr/kr_row.dart`: `KrValueCell` is the
-`X / Y` cell the tree and the detail screen share, and `KrSummaryRow` is the whole
-row, which is how `KrDetailScreen` opens — the same shape the tree row you tapped
-had, so the number can't read differently on the two screens. **Restructure one
-and you must restructure the other.** The tree passes `KrValueCell` a narrower
-`maxWidth` than the detail screen's default; it scales the text down rather than
-wrapping.
+quarter-close-only. Those rows live in `okr/rows.dart`: `KrValueCell` is the
+`X / Y` cell, `KrSummaryRow` is the whole row — which is how `KrDetailScreen`
+opens, the same shape the tree row you tapped had, so the number can't read
+differently on the two screens (**restructure one and you must restructure the
+other**) — and `AreaHeading` is the heading the tree and the Record page share,
+gestureless, so each caller wraps it in its own. The tree passes `KrValueCell` a
+narrower `maxWidth` than the detail screen's default; it scales the text down
+rather than wrapping.
 
 **Hierarchy comes from containment, never from horizontal offset.** An objective
-and its key results are one card: `surfaceContainerLow` at `kRadiusCard`,
-elevation 0, an `outlineVariant` border, and a tone deeper at `surfaceContainer`
-once archived — *not* `surfaceContainerLowest`, which is pure white and glows
-against the page. Every row starts on one edge — `kGapSm` of page padding plus
+and its key results are one card — `AppCard` (`ui/kit.dart`):
+`surfaceContainerLow` at `kRadiusCard`, elevation 0, an `outlineVariant` border,
+and `deeper: true` for a tone deeper at `surfaceContainer` once archived — *not*
+`surfaceContainerLowest`, which is pure white and glows against the page. It's in
+the kit rather than the tree because the Record pages build the same card, and
+two copies would drift. Every row starts on one edge — `kGapSm` of page padding plus
 `kGapMd` of card padding — so nothing is indented and, crucially, **no child sits
 left of its parent**. That was the bug: a *leading* chevron took 24dp and pushed
 an objective's own title in to 32 while its key results stayed at 4. The chevron
@@ -85,35 +88,48 @@ the card and the type weights (objective `titleSmall` w700, key result
 `bodyMedium` w600) already say what an indent would.
 `test/okr_tree_layout_test.dart` pins the shared edge.
 
-The card is **ruled**, by `_rule()`: under each area heading, between an
-objective's own summary and its children, and between every pair of key-result
-rows. The fill and the two-line rhythm were not enough on a real screen — a card
-only a tone off the page had an ambiguous edge, and a row's title sits 8dp above
-its own bar but only 16dp below the previous row's, so a bar read as easily
-upward as downward. Proximity can't carry that at a 2:1 ratio; the rules can.
-Only leaf pages push: `KrDetailScreen`, `KrEditScreen`,
-`QuarterCloseScreen`, and `okr/record_screen.dart` (the "Record" FAB — a flat,
-most-recently-logged-first capture list). Both tabs carry that FAB; backing out
-of the Record page lands on the OKR tab with the last-logged key result's
-objective expanded (`RecordScreen.onLogged` → `GoalsTabState.reveal`), and
-stays put when nothing was logged. Measurement writes go through
-`okr/log_value.dart` so the Record page and KR detail can't drift apart — the
-one exception is `DBHelper._insertCompletion`, below.
+The card is **ruled**, by `AppRule` (`ui/kit.dart`): under each area heading,
+between an objective's own summary and its children, and between every pair of
+key-result rows. The fill and the two-line rhythm were not enough on a real
+screen — a card only a tone off the page had an ambiguous edge, and a row's title
+sits 8dp above its own bar but only 16dp below the previous row's, so a bar read
+as easily upward as downward. Proximity can't carry that at a 2:1 ratio; the
+rules can.
 
-The Record page **fills many key results in one pass**. Every value key result
-carries its own field, all open at once, in a `Map<String, TextEditingController>`
-keyed by id; one `Log N` bar (or the keyboard's done key on any field) writes them
-together through `logKrValue`. A blank field is a key result you didn't do, which
-is why there is no selection step — and a field whose text won't parse keeps it,
-so a bad entry doesn't cost the rest of the pass. Four things hold this together
-and shouldn't be undone piecemeal:
+Only leaf pages push: `KrDetailScreen`, `KrEditScreen`, `QuarterCloseScreen`, and
+the two Record pages below. Both tabs carry the "Record" FAB; backing out of it
+lands on the OKR tab with the last-logged key result's objective expanded
+(`RecordScreen.onLogged` → `GoalsTabState.reveal`), and stays put when nothing was
+logged. Measurement writes go through `okr/log_value.dart` so every logging
+surface stays in step — the one exception is `DBHelper._insertCompletion`, below.
 
-- **There is no search box.** `byRecency` puts what you logged last at the top, so
-  logging five exercises together makes them the top five next time; recency is
-  the finding mechanism. `_order` freezes it for the visit so nothing moves
-  mid-pass.
-- **Each row states value *and* progress** — the `_subtitle` line plus a
-  `ScoreBar`. Choosing what to fill has to be possible without leaving the page.
+**Recording is two steps, because filling is objective-scoped.** A workout is
+every key result under one objective, not rows scattered through everything.
+`okr/record_screen.dart` is the picker — area headings and one `AppCard` per
+objective, `getAreasWithRollup` order throughout, so it reads as the same outline
+as the tree and honours the same Reorder choices. `okr/record_objective.dart` is
+the fill page: that objective's key results in one ruled card, each the tree's own
+two-line row with a value field on the bar's line, and one `Log N` bar (or the
+keyboard's done key) writing every filled field through `logKrValue`. Text lives
+in a `Map<String, TextEditingController>` keyed by id, for the visit only.
+
+A flat, recency-ordered list came first and was wrong: every row had to repeat its
+objective in a subtitle *beside* a bar *beside* a field, which wrapped into three
+cramped lines. Knowing the objective is what buys the space back. `byRecency` went
+with it — you can't group by area and sort by recency, and the grouping is what
+makes the page navigable, which is also why there's no search box.
+
+Five things hold the fill page together and shouldn't be undone piecemeal:
+
+- **A blank field is a key result you didn't do**, which is why there's no
+  selection step. A field whose text won't parse keeps it, so one bad entry
+  doesn't cost the rest of the pass.
+- **Each row states value *and* progress**, via `KrValueCell` and `ScoreBar` —
+  choosing what to fill has to be possible without leaving the page. The field
+  carries no unit and no hint of its own — `80 / 90 kg` sits directly above it, so
+  repeating either only cost width — and where the two compete for the row, the
+  number gives: `KrValueCell(dense: true)` drops it to `bodySmall`, matching the
+  `DeltaText` under it, so the field stays comfortably tappable.
 - **A `COUNT` keeps its one-tap `+1` and gets no field.** `aggregateValues` counts
   *rows*, so a "3" typed into a COUNT would write one row worth 3 and score as 1.
   A tally's unit of record is one occurrence.
@@ -121,9 +137,11 @@ and shouldn't be undone piecemeal:
   Committing is already reversible — any measurement can be deleted from its
   entry — so the guard exists for the typing, not the writes. Nothing is
   persisted: no draft outlives the visit.
+- **An objective with no key results is absent from the picker**, and an area
+  whose objectives all drop out loses its heading. There's nothing to record in
+  one, so offering it would be a dead end.
 
-`test/record_multi_test.dart` pins all four; `test/record_order_test.dart` pins
-the ordering the missing search box relies on.
+`test/record_multi_test.dart` walks both steps and pins all five.
 
 `KrDetailScreen` **states the number, shows the history, and records into it**.
 Its history is one list with no view switch: `byPeriodDesc` (`okr/period.dart`)

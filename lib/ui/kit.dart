@@ -17,6 +17,56 @@ const double kTapTarget = 48;
 /// Corner radius of a card that holds a group of rows.
 const double kRadiusCard = 16;
 
+/// The card that holds a group of rows: a fill only a tone off the page, closed
+/// by an outline because the fill alone left its edge ambiguous at a glance.
+///
+/// Containment is how the OKR module shows hierarchy — nothing is ever indented
+/// — so the card is shared rather than rebuilt per screen: the tree's objectives
+/// and the Record pages must not drift apart.
+class AppCard extends StatelessWidget {
+  final Widget child;
+
+  /// Sits a tone deeper, so the card reads as shelved rather than dressed
+  /// differently. Not `surfaceContainerLowest`, which is pure white and would
+  /// glow against the page.
+  final bool deeper;
+
+  const AppCard({super.key, required this.child, this.deeper = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: kGapSm),
+      elevation: 0,
+      color: deeper ? scheme.surfaceContainer : scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(kRadiusCard),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      // Keeps a row's ink ripple inside the rounded corners.
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+}
+
+/// A hairline inside an [AppCard], inset to the card's own text column. It says
+/// where one row ends — proximity alone couldn't, because a two-line row's title
+/// sits closer to its own bar than to the row above it.
+class AppRule extends StatelessWidget {
+  const AppRule({super.key});
+
+  @override
+  Widget build(BuildContext context) => Divider(
+        height: 1,
+        thickness: 0.5,
+        indent: kGapMd,
+        endIndent: kGapMd,
+        color: Theme.of(context).colorScheme.outlineVariant,
+      );
+}
+
 /// A consistent, roomy bottom sheet: full width, rounded top, a drag handle,
 /// a title with a close button, and a scrolling body that grows with content
 /// up to [heightFactor] of the screen. Tapping outside dismisses it.
@@ -608,9 +658,14 @@ class LogValueField extends StatelessWidget {
   final VoidCallback onSubmit;
   final bool autofocus;
 
-  /// Overrides the notation examples. The Record page passes `''`: its field is
-  /// a narrow column beside a row that already states the current value.
+  /// Overrides the notation examples. The objective fill page passes `''`: its
+  /// field is a narrow column beside a row that already states the value.
   final String hintText;
+
+  /// Smaller text and tighter padding, for a field that sits in a narrow column
+  /// beside the value it changes rather than owning its own line — at the
+  /// default size it towered over the row.
+  final bool compact;
 
   const LogValueField({
     super.key,
@@ -619,6 +674,7 @@ class LogValueField extends StatelessWidget {
     this.unit,
     this.autofocus = false,
     this.hintText = 'e.g. 30, 3x10, 10,9,8',
+    this.compact = false,
   });
 
   @override
@@ -631,11 +687,15 @@ class LogValueField extends StatelessWidget {
       enableSuggestions: false,
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => onSubmit(),
+      style: compact ? Theme.of(context).textTheme.bodyMedium : null,
       decoration: InputDecoration(
         isDense: true,
         hintText: hintText,
         suffixText: unit ?? '',
         border: const OutlineInputBorder(),
+        contentPadding: compact
+            ? const EdgeInsets.symmetric(horizontal: kGapSm, vertical: kGapSm)
+            : null,
       ),
     );
   }

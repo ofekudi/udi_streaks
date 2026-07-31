@@ -50,8 +50,16 @@ void main() {
     await tester.tap(find.text('Record'));
     await tester.pumpAndSettle();
 
+    // Recording is two steps: pick the objective, then log into its key result.
+    await tester.tap(find.text('Mornings'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('+1'));
     await tester.pump();
+
+    // Out of the fill page, then out of the picker — the second pop is the one
+    // the shell is awaiting.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 
