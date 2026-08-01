@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
+import 'close_period.dart';
 import 'okr_screens.dart';
 import 'period.dart';
+import 'period_report.dart';
 import 'record_screen.dart';
 import 'rows.dart';
 
@@ -52,6 +54,15 @@ class GoalsTabState extends State<GoalsTab> {
 
   bool _isExpanded(String id) => !_collapsed.contains(id);
 
+  /// The period "Close …" would act on, or null when there is nothing to close
+  /// — see [DBHelper.closablePeriod]. Read on every [reload] because carrying
+  /// the last objective out of a period is what empties it.
+  Period? _closable;
+
+  /// Whether any period has been closed, which is all "Past periods" needs to
+  /// know to decide whether it is worth offering.
+  bool _hasClosed = false;
+
   @override
   void initState() {
     super.initState();
@@ -60,11 +71,15 @@ class GoalsTabState extends State<GoalsTab> {
 
   /// Public so the nav shell can reload the tab on entry.
   Future<void> reload() async {
-    final areas =
-        await DBHelper().getAreasWithRollup(includeArchived: _showArchived);
+    final db = DBHelper();
+    final areas = await db.getAreasWithRollup(includeArchived: _showArchived);
+    final closable = await db.closablePeriod();
+    final closed = await db.closedPeriods();
     if (!mounted) return;
     setState(() {
       _areas = areas;
+      _closable = closable;
+      _hasClosed = closed.isNotEmpty;
       _loading = false;
       _collapsed
         ..clear()
@@ -99,6 +114,10 @@ class GoalsTabState extends State<GoalsTab> {
           PopupMenuButton<String>(
             onSelected: (v) {
               switch (v) {
+                case 'close':
+                  _closePeriod();
+                case 'past':
+                  _openPastPeriods();
                 case 'archived':
                   setState(() => _showArchived = !_showArchived);
                   reload();
@@ -107,6 +126,15 @@ class GoalsTabState extends State<GoalsTab> {
               }
             },
             itemBuilder: (_) => [
+              // Named with the quarter rather than "start a new period":
+              // *which* one is the fact you need before tapping.
+              if (_closable case final c?)
+                PopupMenuItem(value: 'close', child: Text('Close ${c.label}')),
+              if (_hasClosed)
+                const PopupMenuItem(
+                    value: 'past', child: Text('Past periods')),
+              if (_closable != null || _hasClosed)
+                const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'archived',
                 child: Text(_showArchived
@@ -425,9 +453,10 @@ class GoalsTabState extends State<GoalsTab> {
     reload();
   }
 
-  /// Closing a quarter archives the objective and clones it into the next one,
-  /// so offering it again on the archive would mint a second copy. An archived
-  /// objective gets the way back instead.
+  /// Archiving is per-objective; *closing* is not. Grading and renewing moved
+  /// to the period-wide flow in the overflow menu, because doing it one
+  /// objective at a time was twelve separate acts with nothing recording that
+  /// the quarter itself was over.
   List<SheetAction> _closeOrReopen(Map<String, dynamic> o) {
     if (o['status'] == 'archived') {
       return [
@@ -438,10 +467,6 @@ class GoalsTabState extends State<GoalsTab> {
       ];
     }
     return [
-      SheetAction(
-          icon: Icons.flag_outlined,
-          label: 'Close quarter · grade + renew',
-          onTap: () => _closeQuarter(o)),
       SheetAction(
           icon: Icons.archive_outlined,
           label: 'Archive',
@@ -475,16 +500,19 @@ class GoalsTabState extends State<GoalsTab> {
     reload();
   }
 
-  Future<void> _closeQuarter(Map<String, dynamic> o) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => QuarterCloseScreen(
-          objective: o,
-          krs: (o['key_results'] as List).cast<Map<String, dynamic>>(),
-        ),
-      ),
-    );
+  Future<void> _closePeriod() async {
+    final p = _closable;
+    if (p == null) return;
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => ClosePeriodScreen(period: p)));
+    reload();
+  }
+
+  Future<void> _openPastPeriods() async {
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const PastPeriodsScreen()));
+    // Re-scoring from a report writes grades, and the menu's own entries
+    // depend on what is closed.
     reload();
   }
 

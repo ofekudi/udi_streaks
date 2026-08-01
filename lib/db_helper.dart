@@ -796,6 +796,114 @@ class DBHelper {
     return result;
   }
 
+  // ---------- Periods ----------
+
+  /// The period a close would act on: the earliest one that still holds an
+  /// active objective, or null when there is nothing to close.
+  ///
+  /// Taking the earliest rather than the current quarter is what lets a late
+  /// close work — it is October and Q3 is still open, so Q3 is what gets
+  /// closed. The upper bound is what stops an early one looping: close Q3 in
+  /// August and its clones land in Q4, which is still ahead of us, so the menu
+  /// goes quiet instead of immediately offering to close Q4 as well.
+  Future<Period?> closablePeriod() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+        "SELECT MIN(start_date) AS at FROM objectives WHERE status = 'active'");
+    final at = rows.first['at'] as String?;
+    if (at == null) return null;
+    final candidate = Period.ofDate(DateTime.parse(at));
+    return candidate.start.isAfter(Period.current().start) ? null : candidate;
+  }
+
+  /// The tree as it stood in [p]: areas → the objectives that *started* in that
+  /// period → their key results, each carrying its computed state and the grade
+  /// it was given.
+  ///
+  /// An objective's period comes from `start_date`, which is why a renewal's
+  /// clone shows up in the next period's tree and not this one, and why no
+  /// lineage column is needed to reconstruct a closed quarter.
+  ///
+  /// Unlike [getAreasWithRollup], archived objectives *do* count towards the
+  /// rollup here: in a closed period being archived is the normal end state,
+  /// so excluding them would leave a finished quarter scoring nothing. Areas
+  /// with nothing in the period drop out entirely.
+  Future<List<Map<String, dynamic>>> getPeriodTree(Period p) async {
+    final db = await database;
+    final grades = await gradesForPeriod(p);
+    final result = <Map<String, dynamic>>[];
+    for (final a in await getAreas()) {
+      final objs = await db.query('objectives',
+          where: 'area_id = ? AND start_date >= ? AND start_date <= ?',
+          whereArgs: [
+            a['id'],
+            p.start.toIso8601String(),
+            p.end.toIso8601String(),
+          ],
+          orderBy: 'sort_order ASC, created_at ASC');
+      if (objs.isEmpty) continue;
+      final objectives = <Map<String, dynamic>>[];
+      for (final o in objs) {
+        final krs = [
+          for (final k
+              in await getKeyResultsWithProgress(o['id'] as String, objective: o))
+            {...k, 'grade': grades['key_result']?[k['id']]},
+        ];
+        objectives.add({
+          ...o,
+          'score': weightedScore(krs),
+          'grade': grades['objective']?[o['id']],
+          'key_results': krs,
+        });
+      }
+      result.add({
+        ...a,
+        'score': meanScore(objectives),
+        'objectives': objectives,
+      });
+    }
+    return result;
+  }
+
+  /// The figures the close flow's last card states.
+  ///
+  /// `carried` counts what now sits in the *next* period, because renewal is
+  /// the only thing that puts an objective there while a close is running —
+  /// which is what lets the count survive quitting the flow and coming back,
+  /// where an in-memory tally would not.
+  Future<({double? score, int scored, int scorable, int carried, int dropped})>
+      periodSummary(Period p) async {
+    final db = await database;
+    final tree = await getPeriodTree(p);
+    final objectives = [
+      for (final a in tree)
+        ...(a['objectives'] as List).cast<Map<String, dynamic>>(),
+    ];
+    final krs = [
+      for (final o in objectives)
+        ...(o['key_results'] as List).cast<Map<String, dynamic>>(),
+    ];
+    final next = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM objectives '
+          'WHERE start_date >= ? AND start_date <= ?',
+          [
+            p.next.start.toIso8601String(),
+            p.next.end.toIso8601String(),
+          ],
+        )) ??
+        0;
+    final decided = objectives.where((o) => o['status'] == 'archived').length;
+    return (
+      score: meanScore(objectives),
+      scored: krs.where((k) => k['grade'] != null).length,
+      scorable: krs.length,
+      carried: next,
+      // Never negative: an objective added to the next quarter by hand would
+      // otherwise push this below zero.
+      dropped: (decided - next).clamp(0, decided),
+    );
+  }
+
   // ---------- Objectives ----------
 
   Future<String> insertObjective({
@@ -884,79 +992,104 @@ class DBHelper {
 
   /// Clones an objective and its key results into the next quarter, then
   /// archives the original. Non-destructive: measurements are never touched.
-  Future<String> renewObjective(String objectiveId) async {
+  ///
+  /// [dropKeyResults] leaves those key results out of the clone, and
+  /// [newTargets] gives one a different target than the one it is carrying.
+  /// Both are how the close flow's "Adjust targets" works; with neither, this
+  /// is the plain renewal it has always been.
+  ///
+  /// Dropping a key result a habit fed leaves that habit linked to nothing —
+  /// the link is cleared on the archived copy either way, and there is no clone
+  /// to hand it to. The habit and its streak are untouched; it just stops
+  /// counting towards an objective that no longer exists.
+  ///
+  /// One transaction, because the flow calls this once per objective in a row:
+  /// a failure between the clone and the archive would otherwise leave the
+  /// quarter half-renewed, with no way to tell which half.
+  Future<String> renewObjective(
+    String objectiveId, {
+    Set<String>? dropKeyResults,
+    Map<String, ({double value, String? raw})>? newTargets,
+  }) async {
     final db = await database;
-    final rows = await db.query('objectives',
-        where: 'id = ?', whereArgs: [objectiveId], limit: 1);
-    if (rows.isEmpty) return objectiveId;
-    final o = rows.first;
-    final next = Period.ofDate(DateTime.parse(o['start_date'] as String)).next;
-    final newId = uuid.v4();
-    final now = DateTime.now().toIso8601String();
-    await db.insert('objectives', {
-      'id': newId,
-      'area_id': o['area_id'],
-      'title': o['title'],
-      'description': o['description'],
-      'start_date': next.start.toIso8601String(),
-      'end_date': next.end.toIso8601String(),
-      'status': 'active',
-      'sort_order': o['sort_order'],
-      'created_at': now,
-      'updated_at': now,
-    });
-    await db.update('objectives', {'status': 'archived', 'updated_at': now},
-        where: 'id = ?', whereArgs: [objectiveId]);
-    final krs = await db.query('key_results',
-        where: 'objective_id = ?', whereArgs: [objectiveId]);
-    for (final k in krs) {
-      // A Value key result starts the new quarter where this one ended, so a
-      // "3x10 -> 3x12" goal doesn't have to be rebuilt by hand; its last entry
-      // becomes the new baseline, notation included. With nothing logged, the
-      // declared baseline carries over unchanged.
-      Object? baseline = k['baseline_value'];
-      Object? baselineRaw = k['baseline_raw'];
-      if (k['aggregation'] == 'LATEST') {
-        final last = await db.query('measurements',
-            columns: ['value', 'note'],
-            where: 'key_result_id = ?',
-            whereArgs: [k['id']],
-            orderBy: 'recorded_at DESC',
-            limit: 1);
-        if (last.isNotEmpty) {
-          baseline = last.first['value'];
-          baselineRaw = last.first['note'];
-        }
-      }
-      await db.insert('key_results', {
-        'id': uuid.v4(),
-        'objective_id': newId,
-        'trackable_id': k['trackable_id'],
-        'title': k['title'],
-        'aggregation': k['aggregation'],
-        'source': k['source'],
-        'target_value': k['target_value'],
-        'target_raw': k['target_raw'],
-        'baseline_value': baseline,
-        'baseline_raw': baselineRaw,
-        'direction': k['direction'],
-        'unit': k['unit'],
-        'window_mode': k['window_mode'],
-        'window_days': k['window_days'],
-        'cadence_days': k['cadence_days'],
-        'category': k['category'],
-        'habit_id': k['habit_id'],
-        'weight': k['weight'],
-        'sort_order': k['sort_order'],
+    return db.transaction((txn) async {
+      final rows = await txn.query('objectives',
+          where: 'id = ?', whereArgs: [objectiveId], limit: 1);
+      if (rows.isEmpty) return objectiveId;
+      final o = rows.first;
+      final next =
+          Period.ofDate(DateTime.parse(o['start_date'] as String)).next;
+      final newId = uuid.v4();
+      final now = DateTime.now().toIso8601String();
+      await txn.insert('objectives', {
+        'id': newId,
+        'area_id': o['area_id'],
+        'title': o['title'],
+        'description': o['description'],
+        'start_date': next.start.toIso8601String(),
+        'end_date': next.end.toIso8601String(),
+        'status': 'active',
+        'sort_order': o['sort_order'],
         'created_at': now,
+        'updated_at': now,
       });
-    }
-    // A habit link follows the objective into the new quarter rather than being
-    // held at both ends: the archived copy must let go of it, or which key
-    // result a completion feeds comes down to row order.
-    await db.update('key_results', {'habit_id': null},
-        where: 'objective_id = ?', whereArgs: [objectiveId]);
-    return newId;
+      await txn.update('objectives', {'status': 'archived', 'updated_at': now},
+          where: 'id = ?', whereArgs: [objectiveId]);
+      final krs = await txn.query('key_results',
+          where: 'objective_id = ?', whereArgs: [objectiveId]);
+      for (final k in krs) {
+        if (dropKeyResults?.contains(k['id']) ?? false) continue;
+        // A Value key result starts the new quarter where this one ended, so a
+        // "3x10 -> 3x12" goal doesn't have to be rebuilt by hand; its last
+        // entry becomes the new baseline, notation included. With nothing
+        // logged, the declared baseline carries over unchanged.
+        Object? baseline = k['baseline_value'];
+        Object? baselineRaw = k['baseline_raw'];
+        if (k['aggregation'] == 'LATEST') {
+          final last = await txn.query('measurements',
+              columns: ['value', 'note'],
+              where: 'key_result_id = ?',
+              whereArgs: [k['id']],
+              orderBy: 'recorded_at DESC',
+              limit: 1);
+          if (last.isNotEmpty) {
+            baseline = last.first['value'];
+            baselineRaw = last.first['note'];
+          }
+        }
+        // A raised target replaces both columns together: keeping the old
+        // `target_raw` beside a new number is how "3x12" ends up labelling 40.
+        final retarget = newTargets?[k['id']];
+        await txn.insert('key_results', {
+          'id': uuid.v4(),
+          'objective_id': newId,
+          'trackable_id': k['trackable_id'],
+          'title': k['title'],
+          'aggregation': k['aggregation'],
+          'source': k['source'],
+          'target_value': retarget?.value ?? k['target_value'],
+          'target_raw': retarget != null ? retarget.raw : k['target_raw'],
+          'baseline_value': baseline,
+          'baseline_raw': baselineRaw,
+          'direction': k['direction'],
+          'unit': k['unit'],
+          'window_mode': k['window_mode'],
+          'window_days': k['window_days'],
+          'cadence_days': k['cadence_days'],
+          'category': k['category'],
+          'habit_id': k['habit_id'],
+          'weight': k['weight'],
+          'sort_order': k['sort_order'],
+          'created_at': now,
+        });
+      }
+      // A habit link follows the objective into the new quarter rather than
+      // being held at both ends: the archived copy must let go of it, or which
+      // key result a completion feeds comes down to row order.
+      await txn.update('key_results', {'habit_id': null},
+          where: 'objective_id = ?', whereArgs: [objectiveId]);
+      return newId;
+    });
   }
 
   // ---------- Key results ----------
@@ -1423,6 +1556,54 @@ class DBHelper {
         limit: 1);
     if (r.isEmpty) return null;
     return r.first['grade'] as int?;
+  }
+
+  /// `subject_kind` → `subject_id` → grade, for everything graded in [p]. One
+  /// query over `idx_rev_subj` rather than one [getGrade] per row.
+  Future<Map<String, Map<String, int>>> gradesForPeriod(Period p) async {
+    final db = await database;
+    final rows = await db.query('reviews',
+        columns: ['subject_kind', 'subject_id', 'grade'],
+        where: 'period = ? AND grade IS NOT NULL',
+        whereArgs: [p.id]);
+    final out = <String, Map<String, int>>{};
+    for (final r in rows) {
+      (out[r['subject_kind'] as String] ??= {})[r['subject_id'] as String] =
+          r['grade'] as int;
+    }
+    return out;
+  }
+
+  /// The `subject_kind` of the row that says a period was closed.
+  ///
+  /// It is a marker, not a grade: the user ranks key results and objectives,
+  /// never the quarter, so `grade` stays null and `graded_at` is the closed-at
+  /// stamp. Its `subject_id` is the period id rather than a uuid, which is also
+  /// what keeps [_deleteReviewsUnder] from ever matching it — a record that a
+  /// quarter happened must not die with an area.
+  static const String periodSubjectKind = 'period';
+
+  /// Marks [p] closed. Idempotent, because [saveGrade] upserts on
+  /// `(kind, id, period)` — closing a period twice is one row either way.
+  Future<void> closePeriod(Period p) => saveGrade(
+        subjectKind: periodSubjectKind,
+        subjectId: p.id,
+        period: p.id,
+      );
+
+  /// The periods that have been closed, newest first. `period` is `2026-Q3`,
+  /// which sorts lexicographically the way it reads.
+  Future<List<Period>> closedPeriods() async {
+    final db = await database;
+    final rows = await db.query('reviews',
+        columns: ['period'],
+        where: 'subject_kind = ?',
+        whereArgs: [periodSubjectKind],
+        orderBy: 'period DESC');
+    return [
+      for (final r in rows)
+        if (Period.parse(r['period'] as String) case final p?) p,
+    ];
   }
 
   Future<List<Map<String, dynamic>>> getGradeHistory(String subjectId) async {

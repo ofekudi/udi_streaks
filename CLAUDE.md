@@ -121,8 +121,9 @@ card beneath it. A key result's `X / Y` shares the *first* line with its title,
 right-aligned — which is what lets its bar be as long as its objective's, so two
 bars on the same 0..1 scale can be compared by eye instead of ending at
 different arbitrary places. An area heading, having no bar, states its rollup as
-`fmtPct` on the right of its label; `fmtScore` (a raw 0..1) stays
-quarter-close-only. Those rows live in `okr/rows.dart`: `KrValueCell` is the
+`fmtPct` on the right of its label; `fmtScore` (a raw 0..1) belongs to the
+close flow's score step alone, where the number is the thing being graded
+against rather than a rollup being read. Those rows live in `okr/rows.dart`: `KrValueCell` is the
 `X / Y` cell, `KrSummaryRow` is the whole row — which is how `KrDetailScreen`
 opens, the same shape the tree row you tapped had, so the number can't read
 differently on the two screens (**restructure one and you must restructure the
@@ -185,8 +186,8 @@ one card. **Those two are the only dividers in the app** — there were four, on
 them a hand-rolled `Divider(indent: 72)` in the habits list that was also
 misaligned, since that text column started at 80.
 
-Only leaf pages push: `KrDetailScreen`, `KrEditScreen`, `QuarterCloseScreen`, and
-the two Record pages below. Both tabs carry the "Record" FAB; backing out of it
+Only leaf pages push: `KrDetailScreen`, `KrEditScreen`, `ClosePeriodScreen`,
+`PastPeriodsScreen`, `PeriodReportScreen`, and the two Record pages below. Both tabs carry the "Record" FAB; backing out of it
 lands on the OKR tab with the last-logged key result's objective expanded
 (`RecordScreen.onLogged` → `GoalsTabState.reveal`), and stays put when nothing was
 logged. Measurement writes go through `okr/log_value.dart` so every logging
@@ -280,9 +281,47 @@ accident. Long-press deletes an OKR entry (above), and a day in
 `HabitHistoryDialog` — `deleteCompletionOn` takes it by date, because a
 completion *is* a day: both write paths refuse a second one for the same day.
 That dialog is the only way to reach a day that isn't today; the tile's toggle
-can't. An archived objective can be reopened from its long-press sheet, which is
-also where "Close quarter" is *withheld* once archived — closing clones into the
-next quarter, so offering it twice would mint a second copy.
+can't. An objective can be archived from its long-press sheet, and an archived
+one reopened from the same place.
+
+**Closing a period is one guided flow, not twelve separate acts.**
+`okr/close_period.dart` runs off the OKR tab's overflow menu and walks three
+steps — **score**, **carry**, **close** — with the step named in the app bar
+rather than numbered, and `Score · Carry · Close` stated above it. Grading and
+renewing used to live on each objective's long-press sheet, which meant nothing
+recorded that the quarter itself was over and a half-finished close was
+invisible.
+
+One **objective** per card, not one key result. The objective is the level that
+carries both a decision and a grade of its own, a full tree is a dozen of them
+against three dozen key results, and it is the grain Record already fills at.
+The score step asks 1–10 on every key result and on the objective — not a second
+completeness number, which the bar beside it already gives, but how well the
+thing was *run*. The carry step offers exactly three answers: carry, carry with
+adjusted targets, or don't. `DBHelper.renewObjective` takes `dropKeyResults` and
+`newTargets` for the middle one; with neither it is the plain renewal it always
+was. A target field cleared to blank drops that key result, and clearing all of
+them says so instead of cloning an empty shell.
+
+**Every tap writes.** A grade upserts the moment it is set, a carry decision runs
+the moment its button is pressed. That is what makes resuming free: re-entering
+finds its grades in `reviews` and a carry queue holding only objectives still
+active, with no draft stored anywhere. It is also why the flow has *no* discard
+guard, unlike `RecordObjectiveScreen` — the sole exception is the adjust-targets
+panel, which holds typed text until its button commits and so reuses
+`confirmDiscard`. Scoring is re-runnable, from "Score again" on a period's
+report; **carrying is not**, because a second pass would clone every objective
+again. `test/close_period_test.dart` walks all three steps and pins every one
+of these.
+
+`okr/period_report.dart` is the way back: `PastPeriodsScreen` lists the closed
+quarters, `PeriodReportScreen` shows one as the same outline the tab has. An
+objective's period comes from its `start_date`, so `getPeriodTree` reconstructs
+a finished quarter from columns that already exist and a renewal's clone lands
+in the next period rather than this one — **no lineage column, and don't add
+one for this.** Unlike `getAreasWithRollup`, archived objectives *do* count
+towards a period's rollup: there, being archived is the normal end state, and
+excluding them would score a finished quarter at nothing.
 
 `reviews` has no foreign key, deliberately: a grade has to outlive the objective
 `renewObjective` archives. That means nothing reclaims a grade when its subject is
@@ -293,8 +332,10 @@ needs a branch there.
 **Nothing exports.** There is no backup, no import, and no share — with no
 account and no backend, the database on the phone is the only copy. A clipboard
 JSON dump (`exportAll` / `exportedTables`) existed and was removed as more menu
-than it earned; the OKR tab's overflow menu holds only the archived toggle and
-"Reorder areas".
+than it earned. The OKR tab's overflow menu holds "Close ⟨quarter⟩" and "Past
+periods" above a divider, then the archived toggle and "Reorder areas". The
+first two are withheld when there is nothing to close and nothing closed, so an
+app that has never finished a quarter shows the menu it always did.
 
 A habit can **feed a COUNT key result**: ticking the habit also counts there.
 The link is offered on the habit side only — `habit_detail_sheet.dart` gains
@@ -337,6 +378,12 @@ and don't recompute a rule inline in a widget.
 - `ScoreBar` is always `kAccent` and takes no direction — see above. It is pure
   colour, so pass it a `label`: that plus its percentage is all a screen reader
   gets. `GradeBar` likewise carries its own `Semantics`.
+- A 1–10 grade has **two widgets, deliberately**: `GradeBar` reads one back in
+  ten 8dp segments, `GradeInput` sets one. They can't be one widget with an
+  `onChanged`, because a readout that small is nowhere near a tap target —
+  `GradeInput` is a single `kTapTarget`-high bar where the x you press picks the
+  grade, so there is nothing small to miss and no drag to release. Both take
+  `kAccent`: a grade is a judgement about progress, not a fifth meaning.
 - There is **one heading treatment** (`SectionHeader`, caps at `kTypeAreaLabel`),
   shared by an area, a form section and a quarter, and **one empty state**
   (`EmptyState`: an icon and a line). Each was three. An empty state states the
@@ -361,6 +408,20 @@ and don't recompute a rule inline in a widget.
 Version 7, ten tables. `areas → objectives → key_results` is intent;
 `executions → measurements` is doing; `reviews` holds quarterly grades.
 `executions` and `trackables` exist but have no CRUD yet — leave them.
+
+**No table stores a period.** An objective's quarter is implied by its
+`start_date`, a measurement's by its `recorded_at`, and `reviews.period` is the
+only period string in the schema. `okr/period.dart` derives the rest, which is
+what let the whole close-and-report flow ship without a migration.
+
+`reviews.subject_kind` is an open string, and `'period'` is one: the row saying
+a quarter was closed is `('period', '2026-Q3', '2026-Q3')` with a **null
+grade** — the user ranks key results and objectives, never the quarter, so what
+that row carries is `graded_at`. Because its `subject_id` is a period id rather
+than a uuid, `_deleteReviewsUnder` can never match it, which is right: a record
+that a quarter happened must outlive the areas it held. `DBHelper.closePeriod`
+writes it through the same `saveGrade` upsert as everything else, so closing
+twice is one row.
 `key_results.target_raw`, `key_results.baseline_raw` and `measurements.note`
 hold the notation the user typed ("3x10"); it's input, not a computed value —
 display it wherever a target, a starting point or an entry is *stated*, but
@@ -375,7 +436,12 @@ at 3x10 instead of 83%, and the sign of `target - baseline` carries the
 direction (`wantsDown`) — the `direction` column only matters without a
 baseline. Offered on `LATEST` key results only: `SUM` and `COUNT` restart at
 zero each quarter by definition. `renewObjective` seeds the next quarter's
-baseline from the KR's last entry, so progressive goals need no rebuilding.
+baseline from the KR's last entry, so progressive goals need no rebuilding —
+and a target raised through the close flow does *not* move it, because where a
+quarter starts and what it aims at are two different facts. That whole clone is
+one transaction: the close flow calls it once per objective in a row, and a
+failure between the clone and the archive would otherwise leave a quarter
+half-renewed with no way to tell which half.
 New migrations go in `_onUpgrade` behind `if (oldVersion < N)`.
 
 `objectives.collapsed` is the accordion's fold state — user input, not a
@@ -394,11 +460,17 @@ story: the FK cascades, so un-ticking a habit or deleting one takes its counts
 back off the key result with no code to run. Two consequences to preserve —
 mirror straight to `key_result_id` (`logKrValue` would route a trackable-backed
 KR somewhere `computeKr` can't see), and `renewObjective` clears `habit_id` on
-the archived copy so the link doesn't end up claimed at both ends.
+the archived copy so the link doesn't end up claimed at both ends. Dropping a
+linked key result through the close flow therefore leaves the habit linked to
+nothing — there is no clone to hand it to — which is correct: the habit and its
+streak are untouched, it just stops feeding an objective that no longer exists.
 
 Because the migrations and these cascades are SQLite behaviour rather than pure
 rules, they are tested against a real database via `sqflite_common_ffi` and
-`DBHelper.openAt` — see `test/habit_okr_link_test.dart` and the
+`DBHelper.openAt` — see `test/renew_carry_test.dart` (carrying with a key result
+dropped or a target raised), `test/period_report_test.dart` (a period
+reconstructing from `start_date`, and what the overflow menu asks before drawing
+itself), `test/habit_okr_link_test.dart` and the
 `*_migration_test.dart` files, which declare the pre-migration schema
 verbatim because `_onCreate` always builds the current one.
 

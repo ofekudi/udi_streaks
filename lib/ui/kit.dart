@@ -1042,6 +1042,88 @@ class GradeBar extends StatelessWidget {
   }
 }
 
+/// The 1–10 grade as something you can set: [GradeBar]'s ten segments, sized
+/// for a finger and with the number stated beside them.
+///
+/// A separate widget rather than an `onChanged` on [GradeBar], because the two
+/// cannot share a size. [GradeBar]'s segments are 8dp wide on an 11dp pitch —
+/// a legible readout and nowhere near a tap target. Here the whole bar is one
+/// [kTapTarget]-high gesture and the x you press picks the grade, so there are
+/// no small targets to miss and no drag to release. A drag along it works too,
+/// for correcting without lifting.
+///
+/// Grading is a judgement about progress, so it takes [kAccent] like every
+/// other bar rather than introducing a colour of its own.
+class GradeInput extends StatelessWidget {
+  final int? grade;
+  final ValueChanged<int> onChanged;
+
+  const GradeInput({super.key, required this.grade, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final g = grade ?? 0;
+    return Semantics(
+      label: 'grade',
+      value: grade == null ? 'not graded' : '$g of 10',
+      slider: true,
+      child: Row(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // 1..10 rather than 0..10: there is no zeroth segment to land
+                // on, and "not graded" is the absence of a value, not a low one.
+                void pick(double dx) {
+                  final step = constraints.maxWidth / 10;
+                  final v = (dx / step).floor() + 1;
+                  final next = v.clamp(1, 10);
+                  if (next != grade) onChanged(next);
+                }
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (d) => pick(d.localPosition.dx),
+                  onHorizontalDragUpdate: (d) => pick(d.localPosition.dx),
+                  child: SizedBox(
+                    height: kTapTarget,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < 10; i++) ...[
+                          if (i > 0) const SizedBox(width: 3),
+                          Expanded(
+                            child: AnimatedContainer(
+                              duration: motion(context, kDurFast),
+                              curve: kCurve,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: i < g ? kAccent : kTrack,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // Wide enough for "10" at any text scale, and holding its width at
+          // "–" so the bar beside it doesn't resize on the first tap.
+          SizedBox(
+            width: 32,
+            child: Text(grade == null ? '–' : '$g',
+                textAlign: TextAlign.end,
+                style: kTypeNumber.copyWith(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Aggregation modes shown to the user in plain language with an example.
 class AggregationOption {
   final String value; // SUM | COUNT | LATEST
