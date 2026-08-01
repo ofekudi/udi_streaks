@@ -76,14 +76,16 @@ class _KrEditScreenState extends State<KrEditScreen> {
   /// better". Tapping flips it.
   Widget _directionToggle() {
     final up = _direction == 'UP';
-    final color = up ? Colors.green : Colors.orange;
+    // The same two colours the bars use for the same two meanings: a key result
+    // climbing is the accent, one meant to fall is [kDown].
+    final color = up ? kAccent : kDown;
     return Tooltip(
       message: up ? 'Higher is better' : 'Lower is better',
       child: Material(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(kGapMd),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(kRadiusField),
         child: InkWell(
-          borderRadius: BorderRadius.circular(kGapMd),
+          borderRadius: BorderRadius.circular(kRadiusField),
           onTap: () => setState(() => _direction = up ? 'DOWN' : 'UP'),
           child: SizedBox(
             width: kTapTarget,
@@ -91,7 +93,8 @@ class _KrEditScreenState extends State<KrEditScreen> {
             child: Center(
               child: Icon(
                 up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                color: color.shade800,
+                color: color,
+                size: 20,
               ),
             ),
           ),
@@ -104,13 +107,10 @@ class _KrEditScreenState extends State<KrEditScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.kr == null ? 'New key result' : 'Edit key result'),
+        title: Text(widget.kr == null ? 'New key result' : 'Edit key result',
+            maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save',
-                style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
+          TextButton(onPressed: _save, child: const Text('Save')),
         ],
       ),
       body: ListView(
@@ -132,11 +132,7 @@ class _KrEditScreenState extends State<KrEditScreen> {
               for (final a in kAggregations)
                 DropdownMenuItem(
                   value: a.value,
-                  child: Text(a.label,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w600)),
+                  child: Text(a.label, style: kTypeKr),
                 ),
             ],
             onChanged: (v) => setState(() => _agg = v!),
@@ -364,7 +360,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     final objective = kr['objective_title'] as String?;
     return Scaffold(
       appBar: AppBar(
-        title: Text(kr['title']),
+        title: Text(kr['title'], maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           if (widget.editable)
             IconButton(
@@ -395,9 +391,9 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
               children: [
                 if (objective != null) ...[
                   Text('in $objective',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: kTypeMeta),
                   const SizedBox(height: kGapSm),
                 ],
                 KrSummaryRow(kr),
@@ -405,7 +401,7 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
                 const SectionHeader('History'),
                 if (_series.isEmpty) _historyEmpty() else ..._history(),
                 // Room to scroll the last entry clear of the FAB.
-                const SizedBox(height: 80),
+                const SizedBox(height: kFabGutter),
               ],
             ),
     );
@@ -424,13 +420,13 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
     );
     return [
       if (points.length > 1) ...[
-        Card(
+        AppCard(
           child: Padding(
             padding: kListPadding,
             child: Sparkline(points, height: 80),
           ),
         ),
-        const SizedBox(height: kGapLg),
+        const SizedBox(height: kGapMd),
       ],
       for (final (period, entries) in byPeriodDesc(
           _series, (m) => DateTime.parse(m['recorded_at'] as String)))
@@ -439,8 +435,6 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
   }
 
   Widget _quarterSection(Period period, List<Map<String, dynamic>> entries) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
     final unit = kr['unit'] ?? '';
     final grade = _gradeFor(period.id);
     final total = _totalFor(period.id);
@@ -449,18 +443,15 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: kGapMd, bottom: kGapSm),
+          padding: const EdgeInsets.only(top: kGapLg, bottom: kGapSm),
           child: Row(
             children: [
+              // The app's one heading treatment, the same one an area gets.
               Expanded(
-                child: Text(period.label,
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w800, color: muted)),
-              ),
+                  child: Text(period.label.toUpperCase(),
+                      style: kTypeAreaLabel)),
               if (total != null)
-                Text('${fmtNum(total)} $unit'.trim(),
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w800)),
+                Text('${fmtNum(total)} $unit'.trim(), style: kTypeNumber),
               // GradeBar sizes itself to ten fixed segments; don't box it.
               if (grade != null) ...[
                 const SizedBox(width: kGapSm),
@@ -469,8 +460,11 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
             ],
           ),
         ),
-        const Divider(height: 1),
-        for (final m in entries) _entryRow(m, unit),
+        const AppRule.flush(),
+        for (var i = 0; i < entries.length; i++) ...[
+          if (i > 0) const AppRule(),
+          _entryRow(entries[i], unit),
+        ],
       ],
     );
   }
@@ -478,7 +472,6 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
   /// One entry: the day it was logged, and what was logged in the notation it
   /// was typed in. Long-press to delete it, as every other row in the app does.
   Widget _entryRow(Map<String, dynamic> m, String unit) {
-    final theme = Theme.of(context);
     return InkWell(
       onLongPress: () => _entryMenu(m, unit),
       child: ConstrainedBox(
@@ -489,14 +482,12 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
           child: Row(
             children: [
               Expanded(
-                child: Text(fmtDate(DateTime.parse(m['recorded_at'] as String)),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.8))),
+                child: Text(
+                    fmtWeekdayDate(
+                        DateTime.parse(m['recorded_at'] as String)),
+                    style: kTypeMeta),
               ),
-              Text('${entryLabel(m)} $unit'.trim(),
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              Text('${entryLabel(m)} $unit'.trim(), style: kTypeNumber),
             ],
           ),
         ),
@@ -540,21 +531,8 @@ class _KrDetailScreenState extends State<KrDetailScreen> {
 
   /// States that the log is empty and stops there. What to do about it is the
   /// Record button's job, and where entries go is evident once there is one.
-  Widget _historyEmpty() {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: kGapXl),
-      child: Column(
-        children: [
-          Icon(Icons.show_chart, size: 32, color: muted),
-          const SizedBox(height: kGapSm),
-          Text('Nothing logged yet',
-              style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
-        ],
-      ),
-    );
-  }
+  Widget _historyEmpty() =>
+      const EmptyState(Icons.show_chart, 'Nothing logged yet');
 }
 
 // =========================================================================
@@ -572,18 +550,22 @@ class QuarterCloseScreen extends StatefulWidget {
 
 class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
   final Map<String, int> _grades = {};
-  late String _period;
+  late Period _quarter;
+
+  /// The id is what a grade is stored under; the label is what a person reads.
+  /// Titling this screen with the id gave the app two names for one quarter.
+  String get _period => _quarter.id;
 
   @override
   void initState() {
     super.initState();
-    _period = Period.ofDate(DateTime.parse(widget.objective['start_date'])).id;
+    _quarter = Period.ofDate(DateTime.parse(widget.objective['start_date']));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Close $_period')),
+      appBar: AppBar(title: Text('Close ${_quarter.label}')),
       body: ListView(
         padding: kFormPadding,
         children: [
@@ -606,30 +588,31 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
   Widget _gradeRow(Map<String, dynamic> k) {
     final id = k['id'] as String;
     final g = _grades[id] ?? 0;
-    final theme = Theme.of(context);
-    return Card(
+    return AppCard(
       child: Padding(
         padding: kListPadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Expanded(
-                  child: Text(k['title'],
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700))),
+              Expanded(child: Text(k['title'], style: kTypeObjective)),
+              const SizedBox(width: kGapSm),
+              // The raw 0..1 stays a number here, and only here: closing a
+              // quarter is where the score is read as a figure to grade against.
               Text('score ${fmtScore(k['score'] as double?)}',
-                  style: theme.textTheme.bodySmall),
+                  style: kTypeMetaNum),
             ]),
             if (_carriesOver(k))
-              Text(
-                  'renews starting at ${currentLabel(k)} '
-                          '${k['unit'] ?? ''}'
-                      .trim(),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Padding(
+                padding: const EdgeInsets.only(top: kGapXs),
+                child: Text(
+                    'renews starting at ${currentLabel(k)} ${k['unit'] ?? ''}'
+                        .trim(),
+                    style: kTypeMeta),
+              ),
             Row(children: [
-              Text('grade', style: theme.textTheme.labelSmall),
+              Text('GRADE', style: kTypeAreaLabel),
+              const SizedBox(width: kGapSm),
               Expanded(
                 child: Slider(
                   value: g.toDouble(),
@@ -640,12 +623,12 @@ class _QuarterCloseScreenState extends State<QuarterCloseScreen> {
                   onChanged: (v) => setState(() => _grades[id] = v.round()),
                 ),
               ),
+              // Wide enough for "10" at any text scale; at kGapXl it clipped.
               SizedBox(
-                width: kGapXl,
+                width: 32,
                 child: Text('$g',
                     textAlign: TextAlign.end,
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800)),
+                    style: kTypeNumber.copyWith(fontSize: 16)),
               ),
             ]),
           ],

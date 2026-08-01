@@ -26,10 +26,55 @@ Dependencies point downward; nothing may import from a layer above it.
 ```
 main.dart          app setup + bottom-nav shell only (two tabs: Habits, OKR)
 habits/  okr/      feature modules: screens, sheets, dialogs
-ui/kit.dart        shared design kit (spacing, sheets, dialogs, charts)
+ui/kit.dart        shared design kit (widgets: cards, sheets, dialogs, charts)
+ui/theme.dart      buildAppTheme() — the ColorScheme and every component theme
+ui/tokens.dart     colour, spacing, radius, type and motion consts
 db_helper.dart     all persistence — schema, migrations, CRUD
 core/ + *_rules/scoring/rollup/period    pure domain logic
 ```
+
+`ui/tokens.dart` is plain top-level `const`s and **not** a `ThemeExtension`,
+because five widget tests pump a bare `MaterialApp` with no theme, where an
+extension lookup would throw. Light-only is what licenses literal colours: with
+no second brightness to derive, a semantic value can just *be* a colour instead
+of being squeezed into whichever `ColorScheme` role nearly fits. `kit.dart`
+re-exports it, so a screen needs one import to build a row.
+
+Colour carries **four meanings**, and adding a fifth needs a reason: `kAccent`
+teal is progress, done, and a delta going the right way; `kCaution` amber is at
+risk, skipped, or a delta going backwards; `kDanger` red is destructive or a
+broken streak; `kDown` blue marks only the "lower is better" side of the
+direction toggle in `KrEditScreen`, the one control whose subject *is* direction.
+`theme.dart`
+also maps these onto the scheme roles the kit reads (`primary`, `tertiary`,
+`error`, the `surfaceContainer*` set, `outlineVariant`), so a widget still on a
+`Theme.of(context)` lookup lands on the right colour anyway. Don't reach for a
+`Colors.*` swatch — that is what left orange meaning "skipped", "at risk" *and*
+"streak flame" on one habit row.
+
+Component themes are not decoration: they are how a bare `showModalBottomSheet`,
+`AlertDialog` or `TextField` gets the same chrome as its dressed-up sibling.
+`bottomSheetTheme` is why the action and reorder sheets have `showAppSheet`'s
+rounded top and drag handle without repeating it, and `inputDecorationTheme` is
+why every field is filled at `kRadiusField` — a filled field reads as somewhere
+to type, which an outlined box the colour of the card does not. `appBarTheme`
+paints the bar `kPage` and closes it with a hairline, so **no screen sets its own
+`backgroundColor`**; three once set `inversePrimary`, the Flutter template's
+lavender, and fought it.
+
+Type is the **system font** throughout — no font asset, no `google_fonts`.
+Precision comes from weight, size, tracking, and `FontFeature.tabularFigures()`
+on every number, without which a value column reflows each time a digit changes
+width. The tree's three levels are a real ramp — area `kTypeAreaLabel` 11 faint
+caps, objective `kTypeObjective` 15, key result `kTypeKr` 14 — where they were
+once all 14sp separated only by weight. An area label is the *smallest* thing in
+the tree on purpose: it marks a section, it isn't the subject of one.
+
+Motion is subtle and short (`kDurFast` 120 … `kDurSlow` 260, all on `kCurve`).
+Every animated widget takes its duration from `motion(context, …)`, so honouring
+reduce-motion is one call rather than a convention to remember. That covers the
+accordion, the chevron, `ScoreBar` growing to value, `Sparkline` drawing itself
+in, and the habit tick.
 
 The OKR tab is **one screen**: `okr/okr_tree.dart` renders areas → objectives →
 key results as an accordion. Areas are headings, not destinations;
@@ -40,6 +85,21 @@ objective), so no row carries a permanent add affordance. `InlineAddField`
 survives at the bottom of a list, once per tab: "Add area" on the OKR tree and
 "Add streak" on the habits list (where the picked emoji is prefixed onto the
 name — habits have no icon column).
+
+Both tabs now speak one visual language: the habits list is **one `AppCard`
+ruled between habits**, the same containment an objective and its key results
+get, and it uses the kit's type set rather than raw `TextStyle(fontSize: …)`.
+Both also have a loading state, an empty state and pull-to-refresh — the habits
+tab had none of the three, which is why `_select` in `main.dart` can say
+re-tapping the open tab is covered by pull-to-refresh and be telling the truth.
+
+The habit tick (`HabitCheck`) is the app's one core gesture, so it is the one
+place with a haptic: it fires `HapticFeedback.selectionClick()`, animates its
+fill, and **paints optimistically** — the row flips under the finger while the
+write and reload settle behind it. It is a filled box with a check, not an
+`IconButton`, and the streak number beside it is the loudest thing on the row at
+`kTypeNumber` 15. It used to be 14sp, exactly the size of the habit's name, in an
+app named after streaks.
 
 Every level can be **reordered**, and **a row reorders its children, never its
 siblings** — "Reorder objectives" is on the area, "Reorder key results" on the
@@ -71,30 +131,59 @@ gestureless, so each caller wraps it in its own. The tree passes `KrValueCell` a
 narrower `maxWidth` than the detail screen's default; it scales the text down
 rather than wrapping.
 
+Two things hold those rows together. A bar's **height** says which level it
+measures — `kBarThick` on an objective, `kBarThin` on a key result — while its
+**length is deliberately identical**, since length is what makes two scores on one
+0..1 scale comparable by eye. Don't "fix" the heights back: at one weight a
+rollup and a leaf metric were pixel-identical, and only a hairline said which was
+which. And a value cell is sized to the title beside it (15/15 on the detail
+screen, 14/14 in the tree, 14/13 when `dense`), which is what puts the two on one
+baseline — a `FittedBox` reports no baseline for `CrossAxisAlignment.baseline` to
+use, so equal sizes are the only alignment available. Inside the cell the current
+value is loud (`kTypeNumber`) and `/ target unit` recedes (`kTypeUnit`); it is one
+`Text.rich` rather than sibling `Text`s so `find.text('1 / 20')` still matches.
+
+**Every bar is one colour filling one direction, always 0..100.** `scoreFor` has
+already folded direction into the fraction — "84kg heading for 78" is a portion
+of the distance covered — so the bar has nothing left to say about which way the
+number moves, and a bar that changed colour or grew from the other end only
+raised the question of how to read it. A pace tick marking how far through the
+quarter you are was tried here and removed for the same reason: one bar readable
+in two directions is one too many. The quarter's elapsed percent stays in the app
+bar, stated once.
+
 **Hierarchy comes from containment, never from horizontal offset.** An objective
-and its key results are one card — `AppCard` (`ui/kit.dart`):
-`surfaceContainerLow` at `kRadiusCard`, elevation 0, an `outlineVariant` border,
-and `deeper: true` for a tone deeper at `surfaceContainer` once archived — *not*
-`surfaceContainerLowest`, which is pure white and glows against the page. It's in
-the kit rather than the tree because the Record pages build the same card, and
-two copies would drift. Every row starts on one edge — `kGapSm` of page padding plus
+and its key results are one card — `AppCard` (`ui/kit.dart`): `kCard` white at
+`kRadiusCard`, a `kHairline` border, one 4%-ink micro-shadow, and `deeper: true`
+for `kCardDeep` and no shadow once archived. Pure white was once rejected here as
+"glowing against the page", and that was true only while the page was itself
+near-white; against `kPage` the white is what makes the card an object. Its
+hairline is a **`foregroundDecoration`**, not a border in `decoration` — a border
+there insets the child by its width, and that one pixel pushes an objective's
+title off the edge its area heading and key results share
+(`test/okr_tree_layout_test.dart` catches exactly this). It's in the kit rather
+than the tree because the Record pages and the habits list build the same card,
+and copies would drift. Every row starts on one edge — `kGapSm` of page padding plus
 `kGapMd` of card padding — so nothing is indented and, crucially, **no child sits
 left of its parent**. That was the bug: a *leading* chevron took 24dp and pushed
 an objective's own title in to 32 while its key results stayed at 4. The chevron
 is trailing now, and it needs no tap target of its own because the whole header
 toggles. Indenting the children instead was tried and reverted — it left 136dp of
 title on a 360dp phone. Don't reintroduce a level indent or a leading chevron;
-the card and the type weights (objective `titleSmall` w700, key result
-`bodyMedium` w600) already say what an indent would.
+the card and the type ramp already say what an indent would.
 `test/okr_tree_layout_test.dart` pins the shared edge.
 
-The card is **ruled**, by `AppRule` (`ui/kit.dart`): under each area heading,
-between an objective's own summary and its children, and between every pair of
-key-result rows. The fill and the two-line rhythm were not enough on a real
-screen — a card only a tone off the page had an ambiguous edge, and a row's title
-sits 8dp above its own bar but only 16dp below the previous row's, so a bar read
-as easily upward as downward. Proximity can't carry that at a 2:1 ratio; the
-rules can.
+The card is **ruled**, by `AppRule` (`ui/kit.dart`): between an objective's own
+summary and its children, between every pair of key-result rows, and between
+habits. The fill and the two-line rhythm were not enough on a real screen — a card
+only a tone off the page had an ambiguous edge, and a row's title sits 8dp above
+its own bar but only 16dp below the previous row's, so a bar read as easily
+upward as downward. Proximity can't carry that at a 2:1 ratio; the rules can.
+`AppRule.flush()` is the same line without the inset, for a rule that closes a
+page section (an area heading, a quarter heading) rather than parting two rows of
+one card. **Those two are the only dividers in the app** — there were four, one of
+them a hand-rolled `Divider(indent: 72)` in the habits list that was also
+misaligned, since that text column started at 80.
 
 Only leaf pages push: `KrDetailScreen`, `KrEditScreen`, `QuarterCloseScreen`, and
 the two Record pages below. Both tabs carry the "Record" FAB; backing out of it
@@ -107,11 +196,30 @@ surface stays in step — the one exception is `DBHelper._insertCompletion`, bel
 every key result under one objective, not rows scattered through everything.
 `okr/record_screen.dart` is the picker — area headings and one `AppCard` per
 objective, `getAreasWithRollup` order throughout, so it reads as the same outline
-as the tree and honours the same Reorder choices. `okr/record_objective.dart` is
-the fill page: that objective's key results in one ruled card, each the tree's own
-two-line row with a value field on the bar's line, and one `Log N` bar (or the
-keyboard's done key) writing every filled field through `logKrValue`. Text lives
-in a `Map<String, TextEditingController>` keyed by id, for the visit only.
+as the tree and honours the same Reorder choices. Each states how much it holds
+as `N KR`, abbreviated because it sits beside a title that deserves the width.
+`okr/record_objective.dart` is the fill page: that objective's key results in one
+ruled card, each the tree's own two-line row with a value field beside it, and one
+`Log N` bar (or the keyboard's done key) writing every filled field through
+`logKrValue`. Text lives in a `Map<String, TextEditingController>` keyed by id,
+for the visit only.
+
+A row is **two lines that end on one right edge**: the title over the bar it
+measures, the value over the field that changes it.
+
+```
+Bench press                 3x10 / 3x12 reps
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░              [      ]
+```
+
+Two rows, not two columns, because the value and the field want different
+widths. The value needs `_kValueWidth` for a number carrying both a target and a
+unit — scaled down to fit, it stops being readable, which is the one thing a page
+for reading numbers can't do to them — while what gets *typed* is short, so the
+field takes `_kFieldWidth` and the difference goes to the bar. Sizing the two
+together forces one of them wrong. `test/record_multi_test.dart` pins the shared
+right edge, that the value is the wider of the two, and that the bar outweighs
+the field.
 
 A flat, recency-ordered list came first and was wrong: every row had to repeat its
 objective in a subtitle *beside* a bar *beside* a field, which wrapped into three
@@ -126,13 +234,16 @@ Five things hold the fill page together and shouldn't be undone piecemeal:
   doesn't cost the rest of the pass.
 - **Each row states value *and* progress**, via `KrValueCell` and `ScoreBar` —
   choosing what to fill has to be possible without leaving the page. The field
-  carries no unit and no hint of its own — `80 / 90 kg` sits directly above it, so
-  repeating either only cost width — and where the two compete for the row, the
-  number gives: `KrValueCell(dense: true)` drops it to `bodySmall`, matching the
-  `DeltaText` under it, so the field stays comfortably tappable.
+  carries no unit and no hint of its own: `80 / 90 kg` sits directly above it, so
+  repeating either only cost width, and its `kField` fill is what says it takes
+  input. `KrValueCell(dense: true)` keeps the number a step down from the tree's,
+  so the field below stays the tappable half of the column.
 - **A `COUNT` keeps its one-tap `+1` and gets no field.** `aggregateValues` counts
   *rows*, so a "3" typed into a COUNT would write one row worth 3 and score as 1.
-  A tally's unit of record is one occurrence.
+  A tally's unit of record is one occurrence. The `+1` is a filled button the same
+  width as the field it stands in for, so the column keeps one right edge, and its
+  label is *text* — as a round `IconButton` with a `+1` tooltip, the only thing
+  naming it was invisible to a touch screen and misread by a screen reader.
 - **Leaving with text in a field asks first** (`PopScope` + `confirmDiscard`).
   Committing is already reversible — any measurement can be deleted from its
   entry — so the guard exists for the typing, not the writes. Nothing is
@@ -214,16 +325,36 @@ and don't recompute a rule inline in a widget.
   state (which Record row is open, whether archived objectives show) lives in
   `setState` and is never persisted — except which objectives are collapsed,
   which is `objectives.collapsed` so the tree reopens the way it was left.
-- Spacing comes from `ui/kit.dart` (`kGapXs`=4 … `kGapXl`=24). Reuse
-  `showActionSheet`, `confirmDelete`, `promptText`, `pickEmoji`, `EmojiWell`,
-  `InlineAddField`, `ScoreBar`. A row carrying both an emoji and a name edits
-  them in one action: `promptNameAndEmoji` is `promptText` with an `EmojiWell`
-  beside the field, which is what an area's "Edit" opens, writing both in one
-  `updateArea` call. Two menu entries for one edit is what it replaced.
-- `ScoreBar` takes its colour from the scheme — `primary`, or `tertiary` for a
-  key result that wants its number to go *down* — so it holds contrast on any
-  surface, and a dark theme would need nothing. It is otherwise pure colour, so
-  pass it a `label`: that plus its percentage is all a screen reader gets.
+- Spacing, colour, radius, type and motion all come from `ui/tokens.dart`
+  (`kGapXs`=4 … `kGapXl`=24). Never use a spacing const as a radius — there is a
+  radius ladder (`kRadiusCard`/`Sheet`/`Field`/`Chip`), and `circular(kGapMd)` is
+  what it replaced. Reuse `showActionSheet`, `confirmDelete`, `promptText`,
+  `pickEmoji`, `EmojiWell`, `InlineAddField`, `ScoreBar`, `EmptyState`,
+  `SectionHeader`. A row carrying both an emoji and a name edits them in one
+  action: `promptNameAndEmoji` is `promptText` with an `EmojiWell` beside the
+  field, which is what an area's "Edit" opens, writing both in one `updateArea`
+  call. Two menu entries for one edit is what it replaced.
+- `ScoreBar` is always `kAccent` and takes no direction — see above. It is pure
+  colour, so pass it a `label`: that plus its percentage is all a screen reader
+  gets. `GradeBar` likewise carries its own `Semantics`.
+- There is **one heading treatment** (`SectionHeader`, caps at `kTypeAreaLabel`),
+  shared by an area, a form section and a quarter, and **one empty state**
+  (`EmptyState`: an icon and a line). Each was three. An empty state states the
+  state and explains only what can't be seen — the constraint in
+  `link_kr_sheet.dart` earns a sentence; "No streaks yet" does not.
+- Anything the user waits on must not sit behind a platform channel.
+  `WidgetSync.push()` is best-effort — there may be no widget placed, and none
+  exists on iOS — so `reload()` fires it without awaiting. `InlineAddField` clears
+  its field *before* awaiting the write for the same reason, and the habit tick
+  paints its new state from `HabitsScreenState._pending` while the write settles
+  behind it.
+- **The Android widget is the same app, so it wears the same accent.** Its
+  palette is named in `android/app/src/main/res/values/colors.xml` and mirrors
+  `ui/tokens.dart` by hand — Dart consts can't reach Android XML, so the two move
+  together or not at all. `widget_accent` *is* `kAccent`. The widget's own bar
+  follows `ScoreBar`'s rule (flat fill, flat track, no gradient), inverted for a
+  dark surface: white on the accent showing through at 25%. Keep white at 90% or
+  above for the small label — 80% falls under 4.5:1 against the accent.
 
 ## Schema
 

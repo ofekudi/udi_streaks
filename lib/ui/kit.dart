@@ -1,48 +1,50 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 
-// Spacing scale — every gap in the OKR module snaps to one of these.
-const double kGapXs = 4, kGapSm = 8, kGapMd = 12, kGapLg = 16, kGapXl = 24;
+import 'tokens.dart';
 
-/// Page padding for a list of cards.
-const kListPadding = EdgeInsets.all(kGapMd);
+/// Spacing, colour, type, radius and motion tokens come with the kit, so a
+/// screen needs one import to build a row.
+export 'tokens.dart';
 
-/// Page padding for a form or detail page.
-const kFormPadding = EdgeInsets.all(kGapLg);
-
-/// Minimum square tap target (Material's 48dp), used by the small square
-/// buttons that sit next to a text field.
-const double kTapTarget = 48;
-
-/// Corner radius of a card that holds a group of rows.
-const double kRadiusCard = 16;
-
-/// The card that holds a group of rows: a fill only a tone off the page, closed
-/// by an outline because the fill alone left its edge ambiguous at a glance.
+/// The card that holds a group of rows: white paper lifted off the grey page by
+/// a hairline and one whisper of shadow.
 ///
-/// Containment is how the OKR module shows hierarchy — nothing is ever indented
-/// — so the card is shared rather than rebuilt per screen: the tree's objectives
-/// and the Record pages must not drift apart.
+/// Containment is how the app shows hierarchy — nothing is ever indented — so
+/// the card is shared rather than rebuilt per screen: the tree's objectives, the
+/// Record pages and the habits list must not drift apart.
 class AppCard extends StatelessWidget {
   final Widget child;
 
-  /// Sits a tone deeper, so the card reads as shelved rather than dressed
-  /// differently. Not `surfaceContainerLowest`, which is pure white and would
-  /// glow against the page.
+  /// Sits a tone deeper and loses its shadow, so the card reads as shelved
+  /// rather than dressed differently.
   final bool deeper;
 
   const AppCard({super.key, required this.child, this.deeper = false});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: kGapSm),
-      elevation: 0,
-      color: deeper ? scheme.surfaceContainer : scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
+      decoration: BoxDecoration(
+        color: deeper ? kCardDeep : kCard,
         borderRadius: BorderRadius.circular(kRadiusCard),
-        side: BorderSide(color: scheme.outlineVariant),
+        boxShadow: deeper
+            ? null
+            : const [
+                BoxShadow(
+                    color: Color(0x0A15171C),
+                    blurRadius: 2,
+                    offset: Offset(0, 1)),
+              ],
+      ),
+      // The hairline goes in *front* of the child, not in the decoration behind
+      // it: a border in `decoration` insets its child by its width, and that
+      // pixel would push an objective's title off the edge its area heading and
+      // its key results share.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(kRadiusCard),
+        border: Border.all(color: kHairline),
       ),
       // Keeps a row's ink ripple inside the rounded corners.
       clipBehavior: Clip.antiAlias,
@@ -54,22 +56,32 @@ class AppCard extends StatelessWidget {
 /// A hairline inside an [AppCard], inset to the card's own text column. It says
 /// where one row ends — proximity alone couldn't, because a two-line row's title
 /// sits closer to its own bar than to the row above it.
+///
+/// [AppRule.flush] spans the full width instead, for a rule that closes a page
+/// section rather than separating two rows of one card.
 class AppRule extends StatelessWidget {
-  const AppRule({super.key});
+  final bool flush;
+
+  const AppRule({super.key}) : flush = false;
+  const AppRule.flush({super.key}) : flush = true;
 
   @override
   Widget build(BuildContext context) => Divider(
         height: 1,
-        thickness: 0.5,
-        indent: kGapMd,
-        endIndent: kGapMd,
-        color: Theme.of(context).colorScheme.outlineVariant,
+        thickness: 1,
+        indent: flush ? 0 : kGapMd,
+        endIndent: flush ? 0 : kGapMd,
+        color: flush ? kHairline : kRule,
       );
 }
 
-/// A consistent, roomy bottom sheet: full width, rounded top, a drag handle,
-/// a title with a close button, and a scrolling body that grows with content
-/// up to [heightFactor] of the screen. Tapping outside dismisses it.
+/// A consistent, roomy bottom sheet: full width, a title with a close button,
+/// and a scrolling body that grows with content up to [heightFactor] of the
+/// screen. Tapping outside dismisses it.
+///
+/// The rounded top, the fill and the drag handle all come from the theme's
+/// `bottomSheetTheme`, which is what lets a bare `showModalBottomSheet` (the
+/// action and reorder sheets below) look like this one without repeating it.
 Future<T?> showAppSheet<T>(
   BuildContext context, {
   required String title,
@@ -81,10 +93,6 @@ Future<T?> showAppSheet<T>(
     isScrollControlled: true,
     isDismissible: true,
     useSafeArea: true,
-    backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => AppSheetShell(
       title: title,
       heightFactor: heightFactor,
@@ -118,25 +126,15 @@ class AppSheetShell extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 4),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 6, 4),
+              padding: const EdgeInsets.fromLTRB(kGapLg, 0, kGapXs, kGapSm),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(title,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: kTypeAppBar),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
@@ -145,10 +143,11 @@ class AppSheetShell extends StatelessWidget {
                 ],
               ),
             ),
-            const Divider(height: 1),
+            const AppRule.flush(),
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                padding: const EdgeInsets.fromLTRB(
+                    kGapLg, kGapLg, kGapLg, kGapXl),
                 child: child,
               ),
             ),
@@ -187,23 +186,16 @@ Future<void> showActionSheet(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-            child: Text(title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-          ),
+          _SheetTitle(title),
           for (final a in actions)
             ListTile(
-              leading: Icon(a.icon, color: a.destructive ? Colors.red : null),
+              leading: Icon(a.icon, color: a.destructive ? kDanger : kInkSoft),
               title: Text(a.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: a.destructive
-                      ? const TextStyle(color: Colors.red)
-                      : null),
+                      ? kTypeKr.copyWith(color: kDanger)
+                      : kTypeKr),
               onTap: () {
                 Navigator.pop(context);
                 a.onTap();
@@ -214,6 +206,22 @@ Future<void> showActionSheet(
       ),
     ),
   );
+}
+
+/// The heading of a sheet that names what is being acted on. Shares
+/// [SectionHeader]'s treatment, so the app has one heading idiom.
+class _SheetTitle extends StatelessWidget {
+  final String title;
+  const _SheetTitle(this.title);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(kGapLg, 0, kGapLg, kGapSm),
+        child: Text(title.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: kTypeAreaLabel),
+      );
 }
 
 /// One sibling level as a drag list: each `(id, label)` entry is a row with a
@@ -233,16 +241,7 @@ Future<List<String>?> showReorderSheet(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Text(title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800)),
-            ),
+            _SheetTitle(title),
             Flexible(
               child: ReorderableListView(
                 shrinkWrap: true,
@@ -255,10 +254,12 @@ Future<List<String>?> showReorderSheet(
                     ListTile(
                       key: ValueKey(order[i].$1),
                       title: Text(order[i].$2,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: kTypeKr),
                       trailing: ReorderableDragStartListener(
                         index: i,
-                        child: const Icon(Icons.drag_handle),
+                        child: const Icon(Icons.drag_handle, color: kInkFaint),
                       ),
                     ),
                 ],
@@ -277,7 +278,9 @@ Future<List<String>?> showReorderSheet(
   return null;
 }
 
-/// A small caps-ish heading above a group, with an optional explainer under it.
+/// A small heading above a group, with an optional explainer under it. Set in
+/// caps at [kTypeAreaLabel] — the app's one heading idiom, shared with an area's
+/// name in the tree and a quarter's name in a history.
 class SectionHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -285,23 +288,43 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(kGapXs, kGapXs, kGapXs, kGapSm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: theme.textTheme.labelSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
+          Text(title.toUpperCase(), style: kTypeAreaLabel),
           if (subtitle != null)
-            Text(subtitle!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Padding(
+              padding: const EdgeInsets.only(top: kGapXs),
+              child: Text(subtitle!, style: kTypeMeta),
+            ),
         ],
       ),
     );
   }
+}
+
+/// Nothing here yet, stated once. An icon, a line, and no coaching — this app
+/// has one user, who put the emptiness there.
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  const EmptyState(this.icon, this.message, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(
+            vertical: kGapXl * 2, horizontal: kGapXl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 28, color: kInkFaint),
+            const SizedBox(height: kGapMd),
+            Text(message, textAlign: TextAlign.center, style: kTypeMeta),
+          ],
+        ),
+      );
 }
 
 /// The standard destructive confirmation. Returns true only if the user
@@ -322,7 +345,7 @@ Future<bool> confirmDelete(
             child: const Text('Cancel')),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          child: const Text('Delete', style: TextStyle(color: kDanger)),
         ),
       ],
     ),
@@ -345,7 +368,7 @@ Future<bool> confirmDiscard(BuildContext context,
             child: const Text('Keep editing')),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('Discard', style: TextStyle(color: Colors.red)),
+          child: const Text('Discard', style: TextStyle(color: kDanger)),
         ),
       ],
     ),
@@ -365,7 +388,6 @@ Future<String?> promptText(BuildContext context,
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(border: OutlineInputBorder()),
         onSubmitted: (v) => Navigator.pop(context, v.trim()),
       ),
       actions: [
@@ -453,7 +475,6 @@ class _NameEmojiDialogState extends State<_NameEmojiDialog> {
             child: TextField(
               controller: _controller,
               autofocus: true,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
               onSubmitted: (_) => _submit(),
             ),
           ),
@@ -511,10 +532,25 @@ Future<String?> pickEmoji(BuildContext context) {
   return showModalBottomSheet<String>(
     context: context,
     builder: (_) => SizedBox(
-      height: 320,
+      height: 340,
       child: EmojiPicker(
         onEmojiSelected: (category, emoji) =>
             Navigator.pop(context, emoji.emoji),
+        // Without a Config the picker paints its own palette and is the one
+        // surface in the app that ignores the theme.
+        config: const Config(
+          emojiViewConfig: EmojiViewConfig(backgroundColor: kCard),
+          categoryViewConfig: CategoryViewConfig(
+            backgroundColor: kCard,
+            iconColor: kInkFaint,
+            iconColorSelected: kAccent,
+            indicatorColor: kAccent,
+            dividerColor: kHairline,
+            backspaceColor: kAccent,
+          ),
+          bottomActionBarConfig: BottomActionBarConfig(enabled: false),
+          searchViewConfig: SearchViewConfig(backgroundColor: kCard),
+        ),
       ),
     ),
   );
@@ -526,21 +562,37 @@ class EmojiWell extends StatelessWidget {
   final String emoji;
   final VoidCallback onTap;
 
-  const EmojiWell({super.key, required this.emoji, required this.onTap});
+  /// Shown, faded, when [emoji] is empty — an unset well still has to look like
+  /// somewhere to tap.
+  final String placeholder;
+
+  const EmojiWell({
+    super.key,
+    required this.emoji,
+    required this.onTap,
+    this.placeholder = '',
+  });
 
   @override
   Widget build(BuildContext context) {
+    final unset = emoji.isEmpty;
     return InkWell(
       onTap: onTap,
+      // Without this the ripple is a square inside a rounded box.
+      borderRadius: BorderRadius.circular(kRadiusField),
       child: Container(
         width: kTapTarget,
         height: kTapTarget,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-          borderRadius: BorderRadius.circular(kGapXs),
+          color: kField,
+          borderRadius: BorderRadius.circular(kRadiusField),
         ),
-        child: Text(emoji, style: const TextStyle(fontSize: 22)),
+        child: Opacity(
+          opacity: unset ? 0.4 : 1,
+          child: Text(unset ? placeholder : emoji,
+              style: const TextStyle(fontSize: 20)),
+        ),
       ),
     );
   }
@@ -584,27 +636,38 @@ class _InlineAddFieldState extends State<InlineAddField> {
       setState(() => _editing = false);
       return;
     }
-    await widget.onSubmit(text);
+    // Emptied before the write, not after it: the text is already captured, so
+    // the field shouldn't wait on a database read to look ready for the next
+    // entry.
     _controller.clear();
-    if (mounted) {
-      setState(() {}); // keep the field open for rapid multi-add
-      _focus.requestFocus();
-    }
+    setState(() {}); // keep the field open for rapid multi-add
+    _focus.requestFocus();
+    await widget.onSubmit(text);
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_editing) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: () {
-            setState(() => _editing = true);
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => _focus.requestFocus());
-          },
-          icon: const Icon(Icons.add),
-          label: Text(widget.label),
+      // A full-width row closed by a rule above it, so it reads as the end of
+      // the list rather than a button that wandered onto the page.
+      return InkWell(
+        onTap: () {
+          setState(() => _editing = true);
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _focus.requestFocus());
+        },
+        borderRadius: BorderRadius.circular(kRadiusField),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: kGapMd),
+          child: Row(
+            children: [
+              const Icon(Icons.add, size: 18, color: kInkFaint),
+              const SizedBox(width: kGapSm),
+              Text(widget.label,
+                  style: kTypeKr.copyWith(
+                      color: kInkFaint, fontWeight: FontWeight.w600)),
+            ],
+          ),
         ),
       );
     }
@@ -622,18 +685,14 @@ class _InlineAddFieldState extends State<InlineAddField> {
               focusNode: _focus,
               autofocus: true,
               textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: widget.hint ?? widget.label,
-                border: const OutlineInputBorder(),
-              ),
+              decoration: InputDecoration(hintText: widget.hint ?? widget.label),
               onSubmitted: (_) => _submit(),
             ),
           ),
           IconButton(
             onPressed: _submit,
             icon: const Icon(Icons.check_circle),
-            color: Theme.of(context).colorScheme.primary,
+            color: kAccent,
           ),
           IconButton(
             onPressed: () {
@@ -687,14 +746,12 @@ class LogValueField extends StatelessWidget {
       enableSuggestions: false,
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => onSubmit(),
-      style: compact ? Theme.of(context).textTheme.bodyMedium : null,
+      style: compact ? kTypeNumber : kTypeKr,
       decoration: InputDecoration(
-        isDense: true,
         hintText: hintText,
         suffixText: unit ?? '',
-        border: const OutlineInputBorder(),
         contentPadding: compact
-            ? const EdgeInsets.symmetric(horizontal: kGapSm, vertical: kGapXs)
+            ? const EdgeInsets.symmetric(horizontal: kGapSm, vertical: kGapSm)
             : null,
       ),
     );
@@ -733,14 +790,30 @@ String fmtNum(num? v) {
 String fmtDate(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// A date as a person would say it, e.g. "14 Jul". The year is dropped: every
+/// date the app shows is inside a quarter it has already named.
+String fmtDayMonth(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+
+/// A logged day, e.g. "Tue 28 Jul". The weekday is the point — it is what makes
+/// a gap in a habit's history legible.
+String fmtWeekdayDate(DateTime d) =>
+    '${_weekdays[d.weekday - 1]} ${fmtDayMonth(d)}';
+
 /// A neutral 0–1 OKR score, e.g. "0.71".
 String fmtScore(double? s) => s == null ? '–' : s.toStringAsFixed(2);
 
 /// A 0–1 fraction as a whole percent, e.g. "71%".
 String fmtPct(double? v) => v == null ? '–' : '${(v * 100).round()}%';
 
-/// The move since the previous entry, e.g. `▲ +6`. Green when it went the way
-/// the key result wants, orange when it went against it, muted when unchanged.
+/// The move since the previous entry, e.g. `↗ +6`. [kAccent] when it went the
+/// way the key result wants, [kCaution] when it went against it, muted when
+/// unchanged.
 class DeltaText extends StatelessWidget {
   final double delta;
   final bool down;
@@ -748,56 +821,95 @@ class DeltaText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final base = theme.textTheme.bodySmall;
-    if (delta == 0) {
-      return Text('±0',
-          style: base?.copyWith(color: theme.colorScheme.onSurfaceVariant));
-    }
+    if (delta == 0) return Text('±0', style: kTypeMetaNum);
     final up = delta > 0;
     final good = down ? !up : up;
-    return Text(
-      '${up ? '▲' : '▼'} ${up ? '+' : '−'}${fmtNum(delta.abs())}',
-      style: base?.copyWith(
-        color: good ? Colors.green.shade700 : Colors.orange.shade800,
-        fontWeight: FontWeight.w700,
-      ),
+    final color = good ? kAccent : kCaution;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // An icon rather than ▲/▼, which Roboto draws as heavy black triangles
+        // that outweigh the number beside them.
+        Icon(up ? Icons.north_east_rounded : Icons.south_east_rounded,
+            size: 12, color: color),
+        const SizedBox(width: 2),
+        Text('${up ? '+' : '−'}${fmtNum(delta.abs())}',
+            style: kTypeMetaNum.copyWith(
+                color: color, fontWeight: FontWeight.w700)),
+      ],
     );
   }
 }
 
-/// A thin progress bar for a KR / objective score.
+/// A thin progress bar for a key result's or objective's score.
 ///
-/// The colour comes from the scheme, so it holds its contrast against any
-/// surface the bar is drawn on: `tertiary` marks a key result that wants its
-/// number to go *down*, `primary` everything else. [label] is what the bar
-/// measures — without it the bar is colour alone and announces nothing.
+/// **One colour, one direction, always 0..100.** Every bar in the app fills from
+/// the left in [kAccent], whichever way the underlying number moves — `scoreFor`
+/// has already turned "84kg heading for 78" into a fraction of the distance
+/// covered, so the bar has nothing left to express about direction. A bar that
+/// changed colour or filled the other way only raised the question of which way
+/// to read it.
+///
+/// [height] is [kBarThick] on an objective and [kBarThin] on its key results —
+/// the *length* stays the same at both levels, because length is what lets two
+/// scores on one 0..1 scale be compared by eye.
+///
+/// [label] is what the bar measures — without it the bar is colour alone and
+/// announces nothing.
 class ScoreBar extends StatelessWidget {
   final double value; // 0..1
-  final bool down;
   final String? label;
-  const ScoreBar(this.value, {super.key, this.down = false, this.label});
+  final double height;
+
+  const ScoreBar(
+    this.value, {
+    super.key,
+    this.label,
+    this.height = kBarThin,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final v = value.clamp(0.0, 1.0);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: LinearProgressIndicator(
-        value: v,
-        minHeight: 6,
-        backgroundColor: scheme.surfaceContainerHighest,
-        valueColor:
-            AlwaysStoppedAnimation(down ? scheme.tertiary : scheme.primary),
-        semanticsLabel: label,
-        semanticsValue: fmtPct(v),
+    final radius = BorderRadius.circular(height / 2);
+    return Semantics(
+      label: label,
+      value: fmtPct(v),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: v),
+        duration: motion(context, kDurSlow),
+        curve: kCurve,
+        builder: (context, shown, _) => SizedBox(
+          height: height,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(
+                decoration:
+                    BoxDecoration(color: kTrack, borderRadius: radius),
+              ),
+              // centerLeft is load-bearing: FractionallySizedBox centres its
+              // child by default, which grows the fill outward from the middle
+              // of the track in both directions.
+              FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: shown,
+                child: Container(
+                  decoration:
+                      BoxDecoration(color: kAccent, borderRadius: radius),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-/// A dependency-free trend sparkline drawn with CustomPaint.
+/// A dependency-free trend sparkline drawn with CustomPaint. It draws itself in
+/// on first build, so the trend arrives as a movement rather than as a shape
+/// that was always there.
 class Sparkline extends StatelessWidget {
   final List<double> points;
   final double height;
@@ -806,11 +918,17 @@ class Sparkline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? Theme.of(context).colorScheme.primary;
+    final c = color ?? kAccent;
     return SizedBox(
       height: height,
       width: double.infinity,
-      child: CustomPaint(painter: _SparkPainter(points, c)),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: motion(context, const Duration(milliseconds: 520)),
+        curve: kCurve,
+        builder: (context, t, _) =>
+            CustomPaint(painter: _SparkPainter(points, c, t)),
+      ),
     );
   }
 }
@@ -818,7 +936,11 @@ class Sparkline extends StatelessWidget {
 class _SparkPainter extends CustomPainter {
   final List<double> points;
   final Color color;
-  _SparkPainter(this.points, this.color);
+
+  /// How much of the line to draw, 0..1.
+  final double progress;
+
+  _SparkPainter(this.points, this.color, this.progress);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -849,26 +971,46 @@ class _SparkPainter extends CustomPainter {
     }
     fill.lineTo(at(n - 1).dx, size.height);
     fill.close();
+
+    // A gradient fill fades out downward, so the line stays the figure and the
+    // area under it stays ground.
     canvas.drawPath(
         fill,
         Paint()
           ..style = PaintingStyle.fill
-          ..color = color.withValues(alpha: 0.10));
-    canvas.drawPath(
-        path,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
-          ..strokeJoin = StrokeJoin.round
-          ..strokeCap = StrokeCap.round
-          ..color = color);
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              color.withValues(alpha: 0.16),
+              color.withValues(alpha: 0.0),
+            ],
+          ).createShader(Offset.zero & size));
+
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    if (progress >= 1) {
+      canvas.drawPath(path, stroke);
+    } else {
+      for (final m in path.computeMetrics()) {
+        canvas.drawPath(m.extractPath(0, m.length * progress), stroke);
+      }
+    }
+
+    // The end point is where the eye lands, so it gets a ring to sit in — a
+    // bare dot disappears into the fill behind it.
     final last = at(n - 1);
-    canvas.drawCircle(last, 3.5, Paint()..color = color);
+    canvas.drawCircle(last, 4.5, Paint()..color = kCard);
+    canvas.drawCircle(last, 2.5, Paint()..color = color);
   }
 
   @override
   bool shouldRepaint(covariant _SparkPainter old) =>
-      old.points != points || old.color != color;
+      old.points != points || old.color != color || old.progress != progress;
 }
 
 /// The 1–10 grade shown as a small segmented bar (read-only display).
@@ -879,22 +1021,23 @@ class GradeBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final g = grade ?? 0;
-    const gradeColor = Color(0xFF3D7DD8);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(10, (i) {
-        return Container(
-          width: 9,
-          height: 16,
-          margin: const EdgeInsets.only(right: 2),
-          decoration: BoxDecoration(
-            color: i < g
-                ? gradeColor
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        );
-      }),
+    return Semantics(
+      label: 'grade',
+      value: grade == null ? 'not graded' : '$g of 10',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(10, (i) {
+          return Container(
+            width: 8,
+            height: 14,
+            margin: const EdgeInsets.only(left: 3),
+            decoration: BoxDecoration(
+              color: i < g ? kAccent : kTrack,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          );
+        }),
+      ),
     );
   }
 }

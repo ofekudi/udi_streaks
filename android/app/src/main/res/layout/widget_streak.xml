@@ -14,7 +14,7 @@
         android:text="0/0"
         android:textSize="14sp"
         android:textStyle="bold"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/widget_on_accent"
         android:gravity="center" />
 
     <ProgressBar
@@ -39,7 +39,7 @@
         android:layout_marginTop="8dp"
         android:text="UdiStreaks"
         android:textSize="10sp"
-        android:textColor="#CCFFFFFF"
+        android:textColor="@color/widget_on_accent_soft"
         android:textStyle="normal"
         android:gravity="center" />
 

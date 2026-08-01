@@ -12,6 +12,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:udi_streaks/db_helper.dart';
 import 'package:udi_streaks/okr/log_value.dart';
 import 'package:udi_streaks/okr/record_screen.dart';
+import 'package:udi_streaks/okr/rows.dart';
 import 'package:udi_streaks/ui/kit.dart';
 
 void main() {
@@ -93,9 +94,12 @@ void main() {
   /// The value field belonging to the row that carries [title] — by row rather
   /// than by index, so the test doesn't depend on two key results inserted in
   /// the same millisecond sorting one way.
+  ///
+  /// Anchored on the row's `InkWell`, which is the row: the title and the field
+  /// are in sibling branches under it, not in one column.
   Finder fieldOf(String title) => find.descendant(
         of: find
-            .ancestor(of: find.text(title), matching: find.byType(Column))
+            .ancestor(of: find.text(title), matching: find.byType(InkWell))
             .first,
         matching: find.byType(LogValueField),
       );
@@ -111,9 +115,9 @@ void main() {
       expect(find.text('TRAINING'), findsOneWidget);
       expect(find.text('MIND'), findsOneWidget);
       expect(find.text('Increase muscle mass'), findsOneWidget);
-      expect(find.text('3 key results'), findsOneWidget);
+      expect(find.text('3 KR'), findsOneWidget);
       expect(find.text('Read more'), findsOneWidget);
-      expect(find.text('1 key result'), findsOneWidget);
+      expect(find.text('1 KR'), findsOneWidget);
     });
 
     testWidgets('an objective with no key results is not offered',
@@ -132,6 +136,47 @@ void main() {
   });
 
   group('the fill page', () {
+    // Title over bar, value over field, the two controls ending on one right
+    // edge. The value is allowed to be wider than the field below it: it has to
+    // fit "3x10 / 3x12 reps", while what gets typed is short, and the width the
+    // field gives up goes to the bar.
+    testWidgets('the value sits over the field, both on the same right edge',
+        (tester) async {
+      await openObjective(tester, 'Increase muscle mass');
+
+      final field = tester.getRect(fieldOf('Bench press'));
+      final value = tester.getRect(find.descendant(
+        of: find
+            .ancestor(
+                of: find.text('Bench press'), matching: find.byType(InkWell))
+            .first,
+        matching: find.byType(KrValueCell),
+      ));
+      final title = tester.getRect(find.text('Bench press'));
+
+      expect(value.right, closeTo(field.right, 1));
+      expect(value.bottom, lessThanOrEqualTo(field.top));
+      // Clear of the title, and with more room than the field, which is what
+      // keeps a long notation from being scaled down to fit.
+      expect(value.left, greaterThan(title.right));
+      expect(value.width, greaterThan(field.width));
+    });
+
+    // The bar is the row's main reading; the field only takes what it needs.
+    testWidgets('the bar takes more of the row than the field', (tester) async {
+      await openObjective(tester, 'Increase muscle mass');
+
+      final bar = tester.getRect(find.descendant(
+        of: find
+            .ancestor(
+                of: find.text('Bench press'), matching: find.byType(InkWell))
+            .first,
+        matching: find.byType(ScoreBar),
+      ));
+
+      expect(bar.width, greaterThan(tester.getRect(fieldOf('Bench press')).width));
+    });
+
     testWidgets('two filled fields write two measurements, the blank one none',
         (tester) async {
       await openObjective(tester, 'Increase muscle mass');
@@ -185,7 +230,7 @@ void main() {
         (tester) async {
       await openObjective(tester, 'Read more');
 
-      await tester.tap(find.byTooltip('+1'));
+      await tester.tap(find.text('+1'));
       await tester.pumpAndSettle();
 
       final rows = await entries(books);
@@ -221,7 +266,7 @@ void main() {
 
       // Back on the picker, one step out rather than all the way.
       expect(find.text('Increase muscle mass'), findsOneWidget);
-      expect(find.text('3 key results'), findsOneWidget);
+      expect(find.text('3 KR'), findsOneWidget);
       expect(await entries(squat), isEmpty);
     });
 
@@ -232,7 +277,7 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
 
-      expect(find.text('3 key results'), findsOneWidget);
+      expect(find.text('3 KR'), findsOneWidget);
     });
   });
 }

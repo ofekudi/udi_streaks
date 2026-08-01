@@ -6,15 +6,18 @@ import 'log_value.dart';
 import 'okr_screens.dart';
 import 'rows.dart';
 
-/// What a key result's number may claim, sharing its line with a title. Less
-/// than the tree gives it, and `dense`: on this page the number sits above a
-/// field that has to stay comfortably tappable, so the number is what gives.
-const double _kKrValueWidth = 96;
+/// What the value may claim on the title's line. Wide enough for a number
+/// carrying both a target and a unit (`3x10 / 3x12 reps`) at `dense`.
+const double _kValueWidth = 140;
 
-/// What the value field claims, sharing its line with the bar. It carries no
-/// unit — the row above it already reads `80 / 90 kg` — and what gets typed in
-/// it is short: `85`, `3x12`, `10,9,8`.
-const double _kFieldWidth = 100;
+/// What the field claims on the bar's line — narrower than the value above it,
+/// because what gets typed is short (`85`, `3x12`, `10,9,8`) and the room it
+/// gives up goes to the bar.
+const double _kFieldWidth = 92;
+
+/// The height of the second row on both sides, so the bar centres against the
+/// field rather than sitting at the top of it.
+const double _kControlHeight = 40;
 
 /// One objective's key results, all fillable at once — the second step of
 /// recording, reached by tapping an objective on [RecordScreen].
@@ -152,18 +155,15 @@ class _RecordObjectiveScreenState extends State<RecordObjectiveScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          title: Text(widget.objective['title']),
+          title: Text(widget.objective['title'],
+              maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : _krs.isEmpty
                 ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(kGapXl),
-                      child: Text('No key results yet'),
-                    ),
-                  )
+                    child:
+                        EmptyState(Icons.flag_outlined, 'No key results yet'))
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(
                         kGapSm, kGapMd, kGapSm, kGapMd),
@@ -187,88 +187,117 @@ class _RecordObjectiveScreenState extends State<RecordObjectiveScreen> {
     );
   }
 
-  Widget _commitBar() => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(kGapMd, kGapSm, kGapMd, kGapSm),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _filled == 0 ? null : _logAll,
-              child: Text(_filled == 0 ? 'Log' : 'Log $_filled'),
+  /// Its own surface, closed by a hairline, so the button is separated from the
+  /// list scrolling behind it.
+  Widget _commitBar() => DecoratedBox(
+        decoration: const BoxDecoration(
+          color: kCard,
+          border: Border(top: BorderSide(color: kHairline)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(kGapMd),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _filled == 0 ? null : _logAll,
+                child: Text(_filled == 0 ? 'Log' : 'Log $_filled'),
+              ),
             ),
           ),
         ),
       );
 
-  /// The tree's key-result row with a field on it: title and number on the
-  /// first line, the bar and the field sharing the second. Tapping the row
-  /// opens the key result; the field and the `+1` take their own taps.
+  /// Two lines, right-aligned into a column of controls: the title over the bar
+  /// it measures, the value over the field that changes it.
+  ///
+  /// Two rows rather than two columns, because the value and the field want
+  /// different widths — the value needs room for `3x10 / 3x12 reps`, while what
+  /// gets typed is short, and every dp the field gives up goes to the bar. They
+  /// still read as one column: both end on the card's right edge.
+  ///
+  /// Tapping the row opens the key result; the field and the `+1` take their own
+  /// taps.
   Widget _row(Map<String, dynamic> k) {
-    final theme = Theme.of(context);
     final score = k['score'] as double?;
     final title = k['title'] as String;
     return InkWell(
       onTap: () => _open(k),
       onLongPress: () => _menu(k),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(kGapMd, kGapSm, kGapMd, kGapSm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              // A two-line title and a value carrying a delta must top-align,
-              // not centre against each other.
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(width: kGapSm),
-                KrValueCell(k, maxWidth: _kKrValueWidth, dense: true),
-              ],
-            ),
-            const SizedBox(height: kGapSm),
-            Row(
-              children: [
-                Expanded(
-                  child: k['target'] != null
-                      ? ScoreBar(score ?? 0,
-                          down: krWantsDown(k), label: title)
-                      : const SizedBox.shrink(),
-                ),
-                const SizedBox(width: kGapMd),
-                SizedBox(
-                  width: _kFieldWidth,
-                  child: _isCount(k)
-                      ? Align(
-                          alignment: Alignment.centerRight,
-                          child: IconButton.filledTonal(
-                            tooltip: '+1',
-                            icon: const Icon(Icons.add),
-                            onPressed: () => _bump(k),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kTapTarget),
+        child: Padding(
+          padding: const EdgeInsets.all(kGapMd),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                // A two-line title and a value carrying a delta must top-align,
+                // not centre against each other.
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: kTypeKr),
+                  ),
+                  const SizedBox(width: kGapSm),
+                  KrValueCell(k, maxWidth: _kValueWidth, dense: true),
+                ],
+              ),
+              const SizedBox(height: kGapSm),
+              Row(
+                children: [
+                  Expanded(
+                    child: k['target'] == null
+                        ? const SizedBox.shrink()
+                        : ScoreBar(score ?? 0, label: title, height: kBarThin),
+                  ),
+                  const SizedBox(width: kGapMd),
+                  SizedBox(
+                    width: _kFieldWidth,
+                    height: _kControlHeight,
+                    child: _isCount(k)
+                        ? _bumpButton(k)
+                        // No unit and no hint: `KrValueCell` states both
+                        // directly above it, and the field's own fill is what
+                        // says it takes input.
+                        : LogValueField(
+                            controller: _fieldFor(k['id'] as String),
+                            hintText: '',
+                            compact: true,
+                            onSubmit: _logAll,
                           ),
-                        )
-                      // No unit and no hint: `KrValueCell` states both on the
-                      // line above, so repeating them only cost width.
-                      : LogValueField(
-                          controller: _fieldFor(k['id'] as String),
-                          hintText: '',
-                          compact: true,
-                          onSubmit: _logAll,
-                        ),
-                ),
-              ],
-            ),
-          ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  /// A COUNT's one tap. The same width as the field it stands in for, so the
+  /// right-hand column keeps one edge, and labelled in text rather than by a
+  /// tooltip, which a touch screen never shows.
+  Widget _bumpButton(Map<String, dynamic> k) => SizedBox(
+        height: 40,
+        child: FilledButton(
+          onPressed: () => _bump(k),
+          style: FilledButton.styleFrom(
+            backgroundColor: kAccentDim,
+            foregroundColor: kAccent,
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(0, 40),
+            textStyle: kTypeNumber.copyWith(color: kAccent),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(kRadiusField)),
+          ),
+          child: const Text('+1'),
+        ),
+      );
 
   void _open(Map<String, dynamic> k) {
     Navigator.push(

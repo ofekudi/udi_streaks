@@ -33,6 +33,15 @@ class HabitsScreenState extends State<HabitsScreen>
 
   List<Map<String, dynamic>> _habits = [];
 
+  /// False only until the first load lands, so an empty first frame doesn't look
+  /// like an empty list.
+  bool _loaded = false;
+
+  /// Today's state for a habit whose write is still in flight, keyed by id. The
+  /// tick reads this first, so it flips under the finger rather than after a
+  /// round-trip through sqflite.
+  final Map<String, HabitDayState> _pending = {};
+
   /// Emoji for the habit being typed — null until picked, so the well shows a
   /// greyed placeholder. Prefixed onto the name: habits have no icon column.
   String? _newHabitEmoji;
@@ -59,18 +68,36 @@ class HabitsScreenState extends State<HabitsScreen>
 
   /// Reloads the list and pushes the new counts to the home-screen widget.
   /// Public so the nav shell can reload the tab on entry.
+  ///
+  /// The widget push is not awaited. It is best-effort by design — there may be
+  /// no widget placed, and on iOS there is no widget at all — so nothing the
+  /// user is waiting on should sit behind a platform channel.
   Future<void> reload() async {
     final habits = await DBHelper().getHabits();
-    if (mounted) setState(() => _habits = habits);
-    await _sync.push();
+    if (mounted) {
+      setState(() {
+        _habits = habits;
+        _loaded = true;
+        _pending.clear();
+      });
+    }
+    _sync.push();
   }
 
   Future<void> _toggle(Map<String, dynamic> habit) async {
-    // Tapping the icon of a skipped habit un-skips it rather than completing it.
-    if (habit['skipped_today'] == true) {
-      await DBHelper().toggleHabitSkip(habit['id']);
+    final id = habit['id'] as String;
+    final skipped = habit['skipped_today'] == true;
+    // Show the outcome now; [reload] clears this once the row says it itself.
+    setState(() => _pending[id] = skipped
+        ? HabitDayState.open
+        : HabitDayState.of(habit) == HabitDayState.done
+            ? HabitDayState.open
+            : HabitDayState.done);
+    // Tapping the tick of a skipped habit un-skips it rather than completing it.
+    if (skipped) {
+      await DBHelper().toggleHabitSkip(id);
     } else {
-      await DBHelper().toggleHabitCompletion(habit['id']);
+      await DBHelper().toggleHabitCompletion(id);
     }
     await reload();
   }
@@ -149,78 +176,72 @@ class HabitsScreenState extends State<HabitsScreen>
     await reload();
   }
 
-  /// The 48x48 emoji well next to the "Add streak" field.
-  Widget _emojiButton() {
-    return InkWell(
-      onTap: () async {
-        final emoji = await pickEmoji(context);
-        if (emoji != null) setState(() => _newHabitEmoji = emoji);
-      },
-      child: Container(
-        width: kTapTarget,
-        height: kTapTarget,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-          borderRadius: BorderRadius.circular(kGapXs),
-        ),
-        child: Text(
-          _newHabitEmoji ?? '😊',
-          style: TextStyle(
-            fontSize: 22,
-            color: _newHabitEmoji == null ? Colors.grey : null,
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: ListView(
-        children: [
-          for (var i = 0; i < _habits.length; i++) ...[
-            if (i > 0)
-              Divider(
-                height: 1,
-                thickness: 0.5,
-                color: Theme.of(context)
-                    .colorScheme
-                    .outline
-                    .withValues(alpha: 0.2),
-                indent: 72,
+      appBar: AppBar(title: Text(widget.title)),
+      body: !_loaded
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: reload,
+              child: ListView(
+                // The same inset the OKR tab uses, so both tabs' cards land on
+                // one edge.
+                padding: const EdgeInsets.fromLTRB(
+                    kGapSm, kGapMd, kGapSm, kGapMd),
+                children: [
+                  if (_habits.isEmpty)
+                    const EmptyState(
+                        Icons.check_circle_outline, 'No streaks yet')
+                  else
+                    // One card holding the day, ruled between rows — the same
+                    // containment the OKR tab gives an objective and its key
+                    // results.
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < _habits.length; i++) ...[
+                            if (i > 0) const AppRule(),
+                            HabitTile(
+                              habit: _habits[i],
+                              pending: _pending[_habits[i]['id']],
+                              onToggle: () => _toggle(_habits[i]),
+                              onOpen: () => _open(_habits[i]),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: kGapXs),
+                    child: InlineAddField(
+                      label: 'Add streak',
+                      hint: 'Type something here',
+                      leading: EmojiWell(
+                        emoji: _newHabitEmoji ?? '',
+                        placeholder: '😊',
+                        onTap: () async {
+                          final emoji = await pickEmoji(context);
+                          if (emoji != null) {
+                            setState(() => _newHabitEmoji = emoji);
+                          }
+                        },
+                      ),
+                      onSubmit: (name) async {
+                        await DBHelper().insertHabit(_newHabitEmoji == null
+                            ? name
+                            : '$_newHabitEmoji $name');
+                        _newHabitEmoji = null;
+                        await reload();
+                      },
+                    ),
+                  ),
+                  // Room to scroll the last row clear of the FAB.
+                  const SizedBox(height: kFabGutter),
+                ],
               ),
-            HabitTile(
-              habit: _habits[i],
-              onToggle: () => _toggle(_habits[i]),
-              onOpen: () => _open(_habits[i]),
             ),
-          ],
-          const SizedBox(height: kGapMd),
-          Padding(
-            // The tiles are full-bleed; the field isn't.
-            padding: const EdgeInsets.symmetric(horizontal: kGapMd),
-            child: InlineAddField(
-              label: 'Add streak',
-              hint: 'Type something here',
-              leading: _emojiButton(),
-              onSubmit: (name) async {
-                await DBHelper().insertHabit(
-                    _newHabitEmoji == null ? name : '$_newHabitEmoji $name');
-                _newHabitEmoji = null;
-                await reload();
-              },
-            ),
-          ),
-          // Room to scroll the last row clear of the FAB.
-          const SizedBox(height: 80),
-        ],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'habits_fab',
         onPressed: widget.onRecord,

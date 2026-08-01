@@ -1,33 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The same bar the app draws, inverted for a dark surface: a solid fill on a
+  track that is the accent showing through. One colour, one direction, no
+  gradient — see ScoreBar in lib/ui/kit.dart.
+-->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Background -->
+    <!-- Track -->
     <item android:id="@android:id/background">
         <shape>
             <corners android:radius="3dp" />
-            <solid android:color="#40FFFFFF" />
+            <solid android:color="@color/widget_track" />
         </shape>
     </item>
 
-    <!-- Secondary progress (unused) -->
-    <item android:id="@android:id/secondaryProgress">
-        <clip>
-            <shape>
-                <corners android:radius="3dp" />
-                <solid android:color="#66FFFFFF" />
-            </shape>
-        </clip>
-    </item>
-
-    <!-- Primary progress -->
+    <!-- Fill -->
     <item android:id="@android:id/progress">
         <clip>
             <shape>
                 <corners android:radius="3dp" />
-                <gradient
-                    android:startColor="#FFFFFF"
-                    android:endColor="#F8B3FF"
-                    android:angle="0" />
+                <solid android:color="@color/widget_on_accent" />
             </shape>
         </clip>
     </item>
-</layer-list> 
+</layer-list>

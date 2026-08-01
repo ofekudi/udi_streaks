@@ -37,27 +37,11 @@ class _Empty extends StatelessWidget {
   const _Empty();
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: kGapXl),
-      child: Column(
-        children: [
-          Icon(Icons.link_off, size: 40, color: scheme.outline),
-          const SizedBox(height: kGapMd),
-          // States the constraint, which is the part that can't be seen: an
-          // empty sheet otherwise reads as broken.
-          Text(
-            'No Count key result on an active objective',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurface.withValues(alpha: 0.7),
-                ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      // States the constraint, which is the part that can't be seen: an empty
+      // sheet otherwise reads as broken.
+      const EmptyState(
+          Icons.link_off, 'No Count key result on an active objective');
 }
 
 /// One key result: its title, the objective beneath it, and the target on the
@@ -71,9 +55,6 @@ class _KrRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
     final owner = kr['linked_habit_name'] as String?;
     // A key result already fed by *this* habit is the current link, not a
     // conflict — it just isn't worth re-picking.
@@ -89,31 +70,20 @@ class _KrRow extends StatelessWidget {
       enabled: !takenByOther,
       leading: Icon(
         takenByOther ? Icons.link : Icons.add_link,
-        color: takenByOther ? scheme.outline : scheme.primary,
+        size: 22,
+        color: takenByOther ? kInkFaint : kAccent,
       ),
-      title: Text(
-        kr['title'] as String,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-      ),
+      title: Text(kr['title'] as String,
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: kTypeKr),
       subtitle: Text(
         takenByOther
             ? 'Linked to "$owner"'
             : (kr['objective_title'] as String? ?? ''),
-        style: TextStyle(
-          fontSize: 13,
-          color: scheme.onSurface.withValues(alpha: 0.7),
-        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: kTypeMeta,
       ),
-      trailing: target == null
-          ? null
-          : Text(
-              target,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurface.withValues(alpha: 0.7),
-              ),
-            ),
+      trailing: target == null ? null : Text(target, style: kTypeMetaNum),
       onTap: takenByOther ? null : onTap,
     );
   }

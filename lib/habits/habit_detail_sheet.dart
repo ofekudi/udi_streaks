@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../core/dates.dart';
 import '../ui/kit.dart';
-import 'habit_tile.dart';
 
 /// What the user picked from a habit's detail sheet. The sheet itself performs
 /// no writes — the screen owns persistence and refreshing.
@@ -18,14 +16,20 @@ enum HabitAction {
 
 /// The bottom sheet shown when a habit row is tapped.
 ///
+/// On [showAppSheet], like its sibling `link_kr_sheet.dart`: the handle, the
+/// title, the close button and the safe area all come from the shell — the last
+/// of which is what keeps "Delete habit" out of the home-indicator gesture zone.
+///
 /// Returns the chosen action, or null if dismissed.
 Future<HabitAction?> showHabitDetailSheet(
   BuildContext context,
   Map<String, dynamic> habit,
 ) {
-  return showModalBottomSheet<HabitAction>(
-    context: context,
-    builder: (sheetContext) => _HabitDetailSheet(habit: habit),
+  return showAppSheet<HabitAction>(
+    context,
+    title: habit['name'] as String,
+    heightFactor: 0.7,
+    builder: (_) => _HabitDetailSheet(habit: habit),
   );
 }
 
@@ -36,110 +40,78 @@ class _HabitDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final done = habit['completed_today'] == true;
     final skipped = habit['skipped_today'] == true;
     final linkedKr = habit['linked_kr_title'] as String?;
+    final created = DateTime.parse(habit['created_at']);
 
     void choose(HabitAction action) => Navigator.pop(context, action);
 
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(vertical: kGapXl, horizontal: kGapLg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: kGapLg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(kGapSm),
-                      onTap: () => choose(HabitAction.rename),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: kGapSm, horizontal: kGapXs),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                habit['name'],
-                                style: theme.textTheme.titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                            Icon(Icons.edit,
-                                size: 20,
-                                color:
-                                    scheme.primary.withValues(alpha: 0.85)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: kGapXs),
-                  Text(
-                    'Created on ${ymd(DateTime.parse(habit['created_at']))}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurface.withValues(alpha: 0.7)),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            _action(
-              icon: done ? Icons.check_circle : Icons.circle_outlined,
-              color: done ? kDoneColor : kIdleColor,
-              label: done ? 'Completed Today' : 'Mark as Completed',
-              onTap: () => choose(HabitAction.toggleComplete),
-            ),
-            // A completed habit cannot also be skipped.
-            if (!done)
-              _action(
-                icon: skipped ? Icons.undo : Icons.not_interested,
-                color: skipped ? kUnskipColor : kSkippedColor,
-                label: skipped ? 'Unskip for Today' : 'Skip for Today',
-                onTap: () => choose(HabitAction.toggleSkip),
-              ),
-            // Completing this habit also counts toward the linked key result,
-            // so the link belongs beside the completion actions.
-            if (linkedKr == null)
-              _action(
-                icon: Icons.add_link,
-                color: scheme.primary,
-                label: 'Link to OKR',
-                onTap: () => choose(HabitAction.link),
-              )
-            else
-              _action(
-                icon: Icons.link_off,
-                color: scheme.primary,
-                label: 'Unlink from "$linkedKr"',
-                onTap: () => choose(HabitAction.unlink),
-              ),
-            _action(
-              icon: Icons.history,
-              color: scheme.primary,
-              label: 'Completion History',
-              onTap: () => choose(HabitAction.history),
-            ),
-            _action(
-              icon: Icons.delete_outline,
-              color: kBrokenColor,
-              label: 'Delete Habit',
-              destructive: true,
-              onTap: () => choose(HabitAction.delete),
-            ),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Created ${fmtDayMonth(created)} ${created.year}',
+            style: kTypeMeta),
+        const SizedBox(height: kGapSm),
+        const AppRule.flush(),
+        _action(
+          icon: done ? Icons.check_circle : Icons.circle_outlined,
+          color: done ? kAccent : kInkFaint,
+          label: done ? 'Completed today' : 'Mark as completed',
+          onTap: () => choose(HabitAction.toggleComplete),
+        ),
+        // A completed habit cannot also be skipped.
+        if (!done)
+          _action(
+            icon: skipped ? Icons.undo : Icons.not_interested,
+            color: kCaution,
+            label: skipped ? 'Unskip for today' : 'Skip for today',
+            onTap: () => choose(HabitAction.toggleSkip),
+          ),
+        // The name is the sheet's title now, so renaming is an action like any
+        // other rather than a tappable heading with a pencil on it.
+        _action(
+          icon: Icons.drive_file_rename_outline,
+          color: kInkSoft,
+          label: 'Rename',
+          onTap: () => choose(HabitAction.rename),
+        ),
+        // Completing this habit also counts toward the linked key result,
+        // so the link belongs beside the completion actions.
+        if (linkedKr == null)
+          _action(
+            icon: Icons.add_link,
+            color: kInkSoft,
+            label: 'Link to OKR',
+            onTap: () => choose(HabitAction.link),
+          )
+        else
+          _action(
+            icon: Icons.link_off,
+            color: kInkSoft,
+            label: 'Unlink from "$linkedKr"',
+            onTap: () => choose(HabitAction.unlink),
+          ),
+        _action(
+          icon: Icons.history,
+          color: kInkSoft,
+          label: 'Completion history',
+          onTap: () => choose(HabitAction.history),
+        ),
+        _action(
+          icon: Icons.delete_outline,
+          color: kDanger,
+          label: 'Delete habit',
+          destructive: true,
+          onTap: () => choose(HabitAction.delete),
+        ),
+      ],
     );
   }
 
+  /// Every row the same size, destructive or not — colour is what marks the
+  /// destructive one, not weight.
   Widget _action({
     required IconData icon,
     required Color color,
@@ -149,15 +121,11 @@ class _HabitDetailSheet extends StatelessWidget {
   }) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: color, size: 28),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontSize: destructive ? 16 : 14,
-          fontWeight: FontWeight.w500,
-          color: destructive ? kBrokenColor : null,
-        ),
-      ),
+      leading: Icon(icon, color: color, size: 22),
+      title: Text(label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: destructive ? kTypeKr.copyWith(color: kDanger) : kTypeKr),
       onTap: onTap,
     );
   }

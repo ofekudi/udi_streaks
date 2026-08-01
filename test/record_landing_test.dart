@@ -53,7 +53,7 @@ void main() {
     // Recording is two steps: pick the objective, then log into its key result.
     await tester.tap(find.text('Mornings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('+1'));
+    await tester.tap(find.text('+1'));
     await tester.pump();
 
     // Out of the fill page, then out of the picker — the second pop is the one
@@ -99,8 +99,9 @@ void main() {
     await tester.pump();
     await tester.enterText(find.byType(TextField), 'Drink water');
     await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump(); // insert + reload queries
-    await tester.pump(); // results land
+    // Settled, not a fixed pump count: the insert and the reload behind it have
+    // to finish before the new row exists to be found.
+    await tester.pumpAndSettle();
 
     expect(find.text('Drink water'), findsOneWidget);
   });

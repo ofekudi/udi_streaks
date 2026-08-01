@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../db_helper.dart';
 import '../ui/kit.dart';
-import 'log_value.dart';
 import 'okr_screens.dart';
 import 'period.dart';
 import 'record_screen.dart';
@@ -37,7 +36,7 @@ class GoalsTab extends StatefulWidget {
 
 /// What a key result's number may claim, sharing its row with a title. Narrower
 /// than [KrValueCell]'s default, which the detail screen keeps.
-const double _kKrValueWidth = 110;
+const double _kKrValueWidth = 118;
 
 class GoalsTabState extends State<GoalsTab> {
   List<Map<String, dynamic>> _areas = [];
@@ -82,8 +81,17 @@ class GoalsTabState extends State<GoalsTab> {
     final p = Period.current();
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text('${p.label} · ${fmtPct(p.fractionElapsed)} elapsed'),
+        // Two facts, not one string: which quarter it is, and how much of it is
+        // gone. At one weight the second read as part of the first.
+        title: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(p.label),
+            const SizedBox(width: kGapSm),
+            Text('${fmtPct(p.fractionElapsed)} elapsed', style: kTypeMetaNum),
+          ],
+        ),
         actions: [
           // Areas reorder from here rather than from a row's long-press: every
           // other level reorders from its parent, and an area's parent is the
@@ -144,7 +152,7 @@ class GoalsTabState extends State<GoalsTab> {
                     ),
                   ),
                   // Room to scroll the last row clear of the FAB.
-                  const SizedBox(height: 80),
+                  const SizedBox(height: kFabGutter),
                 ],
               ),
             ),
@@ -186,15 +194,10 @@ class GoalsTabState extends State<GoalsTab> {
     ];
   }
 
-  Widget _hint(String text) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(kGapMd, kGapXs, kGapMd, kGapSm),
-      child: Text(text,
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-    );
-  }
+  Widget _hint(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(kGapMd, kGapXs, kGapMd, kGapSm),
+        child: Text(text, style: kTypeMeta),
+      );
 
   /// [AreaHeading], with the tree's own gesture on it: long-press is the menu,
   /// and there is no tap — an area isn't a destination.
@@ -227,8 +230,7 @@ class GoalsTabState extends State<GoalsTab> {
   Future<void> _reorderAreas() async {
     final ids =
         await showReorderSheet(context, title: 'Reorder areas', entries: [
-      for (final a in _areas)
-        (a['id'] as String, '${a['icon'] ?? '🎯'}  ${a['name']}'),
+      for (final a in _areas) (a['id'] as String, '${areaIcon(a)}  ${a['name']}'),
     ]);
     if (ids == null) return;
     await DBHelper().reorderAreas(ids);
@@ -265,7 +267,7 @@ class GoalsTabState extends State<GoalsTab> {
     final edit = await promptNameAndEmoji(context,
         title: 'Edit area',
         initialName: a['name'] as String,
-        initialEmoji: (a['icon'] as String?) ?? '🎯');
+        initialEmoji: areaIcon(a));
     if (edit == null) return;
     await DBHelper().updateArea(a['id'], name: edit.name, icon: edit.emoji);
     reload();
@@ -296,8 +298,8 @@ class GoalsTabState extends State<GoalsTab> {
         children: [
           _objectiveHeader(o, open),
           AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
+            duration: motion(context),
+            curve: kCurve,
             alignment: Alignment.topCenter,
             child: open
                 ? _krBlock(o)
@@ -312,7 +314,6 @@ class GoalsTabState extends State<GoalsTab> {
   /// a bar the full width of the card — the same width every key result's bar
   /// gets, so the two can be compared by eye.
   Widget _objectiveHeader(Map<String, dynamic> o, bool open) {
-    final theme = Theme.of(context);
     final score = o['score'] as double?;
     final archived = o['status'] == 'archived';
     return Semantics(
@@ -343,12 +344,9 @@ class GoalsTabState extends State<GoalsTab> {
                           Text(o['title'],
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: archived
-                                    ? theme.colorScheme.onSurfaceVariant
-                                    : null,
-                              )),
+                              style: archived
+                                  ? kTypeObjective.copyWith(color: kInkSoft)
+                                  : kTypeObjective),
                           if (archived) _archivedLabel(),
                         ],
                       ),
@@ -356,16 +354,21 @@ class GoalsTabState extends State<GoalsTab> {
                     const SizedBox(width: kGapSm),
                     // No tap target of its own — the whole header toggles.
                     AnimatedRotation(
-                      duration: const Duration(milliseconds: 180),
+                      duration: motion(context),
+                      // The same curve as the AnimatedSize it fires with — the
+                      // default here is linear, which reads as a different
+                      // gesture.
+                      curve: kCurve,
                       turns: open ? 0 : -0.25,
-                      child: Icon(Icons.expand_more,
-                          size: 20, color: theme.colorScheme.onSurfaceVariant),
+                      child: const Icon(Icons.expand_more,
+                          size: 20, color: kInkFaint),
                     ),
                   ],
                 ),
                 if (score != null) ...[
                   const SizedBox(height: kGapSm),
-                  ScoreBar(score, label: o['title'] as String),
+                  ScoreBar(score,
+                      label: o['title'] as String, height: kBarThick),
                 ],
               ],
             ),
@@ -375,11 +378,17 @@ class GoalsTabState extends State<GoalsTab> {
     );
   }
 
-  Widget _archivedLabel() => Text('archived',
-      style: Theme.of(context)
-          .textTheme
-          .labelSmall
-          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant));
+  /// A badge, not a line of prose: bare text below a title reads as part of it.
+  Widget _archivedLabel() => Container(
+        margin: const EdgeInsets.only(top: kGapXs),
+        padding: const EdgeInsets.symmetric(horizontal: kGapSm, vertical: 2),
+        decoration: BoxDecoration(
+          color: kTrack,
+          borderRadius: BorderRadius.circular(kRadiusChip),
+        ),
+        child: Text('ARCHIVED',
+            style: kTypeAreaLabel.copyWith(fontSize: 10, color: kInkSoft)),
+      );
 
   void _objectiveMenu(Map<String, dynamic> o) {
     showActionSheet(context, title: o['title'], actions: [
@@ -508,7 +517,6 @@ class GoalsTabState extends State<GoalsTab> {
   /// Two lines — title and value, then the bar. The number shares the first
   /// line so the bar can span the card, matching the objective's above it.
   Widget _krRow(Map<String, dynamic> k) {
-    final theme = Theme.of(context);
     final score = k['score'] as double?;
     return InkWell(
       onTap: () => _openKr(k),
@@ -516,7 +524,9 @@ class GoalsTabState extends State<GoalsTab> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: kTapTarget),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(kGapMd, kGapSm, kGapMd, kGapSm),
+          // The same inset as the objective header above it, so rows in one card
+          // keep one rhythm.
+          padding: const EdgeInsets.all(kGapMd),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -530,8 +540,7 @@ class GoalsTabState extends State<GoalsTab> {
                     child: Text(k['title'],
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600)),
+                        style: kTypeKr),
                   ),
                   const SizedBox(width: kGapSm),
                   KrValueCell(k, maxWidth: _kKrValueWidth),
@@ -540,7 +549,7 @@ class GoalsTabState extends State<GoalsTab> {
               if (k['target'] != null) ...[
                 const SizedBox(height: kGapSm),
                 ScoreBar(score ?? 0,
-                    down: krWantsDown(k), label: k['title'] as String),
+                    label: k['title'] as String, height: kBarThin),
               ],
             ],
           ),

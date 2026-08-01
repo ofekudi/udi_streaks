@@ -69,19 +69,12 @@ class _RecordScreenState extends State<RecordScreen> {
   Widget build(BuildContext context) {
     final sections = _sections;
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Record'),
-      ),
+      appBar: AppBar(title: const Text('Record')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : sections.isEmpty
               ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(kGapXl),
-                    child: Text('No key results yet'),
-                  ),
-                )
+                  child: EmptyState(Icons.flag_outlined, 'No key results yet'))
               : ListView(
                   padding: const EdgeInsets.fromLTRB(
                       kGapSm, kGapMd, kGapSm, kGapMd),
@@ -90,6 +83,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       AreaHeading(area),
                       for (final o in objectives) _objectiveCard(o),
                     ],
+                    const SizedBox(height: kGapXl),
                   ],
                 ),
     );
@@ -99,7 +93,6 @@ class _RecordScreenState extends State<RecordScreen> {
   /// the same card the tree gives it, with a chevron where the tree has its
   /// key results.
   Widget _objectiveCard(Map<String, dynamic> o) {
-    final theme = Theme.of(context);
     final score = o['score'] as double?;
     final title = o['title'] as String;
     final n = (o['key_results'] as List).length;
@@ -115,26 +108,23 @@ class _RecordScreenState extends State<RecordScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700)),
+                          style: kTypeObjective),
                     ),
                     const SizedBox(width: kGapSm),
-                    Text(n == 1 ? '1 key result' : '$n key results',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant)),
-                    Icon(Icons.chevron_right,
-                        size: 20, color: theme.colorScheme.onSurfaceVariant),
+                    Text('$n KR', style: kTypeMetaNum),
+                    const SizedBox(width: kGapXs),
+                    const Icon(Icons.chevron_right,
+                        size: 20, color: kInkFaint),
                   ],
                 ),
                 if (score != null) ...[
                   const SizedBox(height: kGapSm),
-                  ScoreBar(score, label: title),
+                  ScoreBar(score, label: title, height: kBarThick),
                 ],
               ],
             ),

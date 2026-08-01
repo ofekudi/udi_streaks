@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The home-screen widget's palette. These mirror lib/ui/tokens.dart — the widget
+  is a second surface for the same app, so the accent has to be one colour in two
+  places. Change one, change the other.
+-->
+<resources>
+    <!-- kAccent -->
+    <color name="widget_accent">#0F766E</color>
+    <!-- On the accent: the count, and the filled part of the bar. -->
+    <color name="widget_on_accent">#FFFFFF</color>
+    <!-- The app name under the bar. Dimmed, but still AA against the accent. -->
+    <color name="widget_on_accent_soft">#E6FFFFFF</color>
+    <!-- The unfilled part of the bar — the accent showing through white. -->
+    <color name="widget_track">#40FFFFFF</color>
+</resources>

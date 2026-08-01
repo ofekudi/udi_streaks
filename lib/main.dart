@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'habits/habits_screen.dart';
 import 'okr/okr_tree.dart';
 import 'okr/record_screen.dart';
+import 'ui/theme.dart';
+import 'ui/tokens.dart';
 
 void main() {
   // sqflite and home_widget both reach for the binding, so make sure it is up
@@ -18,10 +20,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'UdiStreaks',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
       home: const RootNav(),
     );
   }
@@ -83,19 +83,26 @@ class _RootNavState extends State<RootNav> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _index, children: _tabs),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _select,
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.check_circle_outline),
-              selectedIcon: Icon(Icons.check_circle),
-              label: 'Habits'),
-          NavigationDestination(
-              icon: Icon(Icons.track_changes_outlined),
-              selectedIcon: Icon(Icons.track_changes),
-              label: 'OKR'),
-        ],
+      // The hairline is here rather than in the theme because NavigationBar
+      // takes no shape of its own.
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: kHairline)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: _select,
+          destinations: const [
+            NavigationDestination(
+                icon: Icon(Icons.check_circle_outline),
+                selectedIcon: Icon(Icons.check_circle),
+                label: 'Habits'),
+            NavigationDestination(
+                icon: Icon(Icons.track_changes_outlined),
+                selectedIcon: Icon(Icons.track_changes),
+                label: 'OKR'),
+          ],
+        ),
       ),
     );
   }

@@ -82,52 +82,51 @@ class _HabitHistoryDialogState extends State<HabitHistoryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return AlertDialog(
-      title: Text(
-        '${widget.habit['name']} - History',
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
+      title: Text('${widget.habit['name']} · History',
+          maxLines: 2, overflow: TextOverflow.ellipsis),
       content: SizedBox(
         width: double.maxFinite,
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: _history.length,
-          itemBuilder: (context, index) => ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: kGapSm, vertical: kGapXs),
-            leading: CircleAvatar(
-              backgroundColor: scheme.primaryContainer,
-              child: Text(
-                '${_history.length - index}',
-                style: TextStyle(
-                  color: scheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
+        child: _history.isEmpty
+            ? const EmptyState(Icons.event_available, 'Nothing logged yet')
+            : ListView.separated(
+                shrinkWrap: true,
+                itemCount: _history.length,
+                separatorBuilder: (_, __) => const AppRule(),
+                itemBuilder: (context, index) {
+                  final date =
+                      DateTime.parse(_history[index]['date'] as String);
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: kGapSm, vertical: kGapXs),
+                    // The count from the bottom up, so the number beside a day
+                      // says which day of the run it was.
+                    leading: Text('${_history.length - index}',
+                        style: kTypeMetaNum.copyWith(color: kAccent)),
+                    title: Text(fmtWeekdayDate(date), style: kTypeKr),
+                    onLongPress: () =>
+                        _dayMenu(_history[index]['date'] as String),
+                  );
+                },
               ),
-            ),
-            title: Text(
-              _history[index]['date'],
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-            ),
-            onLongPress: () => _dayMenu(_history[index]['date'] as String),
-          ),
-        ),
       ),
+      // Stacked, because "Report retroactively" beside "Close" overflowed a
+      // narrow screen.
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Close',
-              style: TextStyle(
-                  color: scheme.primary, fontWeight: FontWeight.w600)),
-        ),
-        TextButton(
-          onPressed: _reportRetroactively,
-          child: Text('Report Retroactively',
-              style: TextStyle(
-                  color: scheme.primary, fontWeight: FontWeight.w600)),
+        OverflowBar(
+          alignment: MainAxisAlignment.end,
+          overflowAlignment: OverflowBarAlignment.end,
+          spacing: kGapSm,
+          children: [
+            TextButton(
+              onPressed: _reportRetroactively,
+              child: const Text('Report retroactively'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       ],
     );

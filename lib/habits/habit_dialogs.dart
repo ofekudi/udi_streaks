@@ -62,6 +62,8 @@ class _NameDialogState extends State<_NameDialog> {
       content: TextField(
         controller: _controller,
         autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
         decoration: InputDecoration(hintText: widget.hint),
       ),
       actions: [
